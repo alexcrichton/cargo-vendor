@@ -31,7 +31,6 @@ Options:
     -h, --help               Print this message
     -v, --verbose            Use verbose output
     -q, --quiet              No output printed to stdout
-    --color WHEN             Coloring: auto, always, never
 "#)
 }
 
