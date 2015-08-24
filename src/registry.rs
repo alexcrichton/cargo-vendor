@@ -6,9 +6,10 @@ use std::path::Path;
 use cargo::Config;
 use cargo::core::Package;
 use cargo::core::dependency::Kind;
-use cargo::util::{human, hex, CargoResult, ChainError};
+use cargo::util::{human, hex, CargoResult, ChainError, Sha256};
 use git2::{self, Repository};
 use rustc_serialize::json;
+use rustc_serialize::hex::ToHex;
 use url::Url;
 
 #[derive(RustcEncodable)]
@@ -85,7 +86,7 @@ fn vendor_package(config: &Config,
     });
     let dst = download.join(package_id.name())
                       .join(package_id.version().to_string())
-                      .join(crate_file.file_name().unwrap());
+                      .join("download");
     try!(fs::create_dir_all(dst.parent().unwrap()));
     try!(fs::copy(&crate_file, &dst).chain_error(|| {
         human(format!("cached crate file `{}` doesn't exist for `{}`",
@@ -93,12 +94,16 @@ fn vendor_package(config: &Config,
     }));
 
     // Create an entry in the index for this package
+    let mut s = Sha256::new();
+    let mut c = Vec::new();
+    try!(File::open(&dst).and_then(|mut f| f.read_to_end(&mut c)));
+    s.update(&c);
     let package = RegistryPackage {
         name: package_id.name().to_string(),
         vers: package_id.version().to_string(),
         features: package.summary().features().clone(),
         yanked: Some(false),
-        cksum: String::new(),
+        cksum: s.finish().to_hex(),
         deps: package.dependencies().iter().map(|d| {
             RegistryDependency {
                 name: d.name().to_string(),
