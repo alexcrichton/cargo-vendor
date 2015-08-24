@@ -33,12 +33,18 @@ Create a `.cargo/config` with this entry to use the vendor cache:
     [registry]
     index = "file:///home/foo/code/bar/vendor/index"
 
+$ cargo build
+    Updating registry `file:///home/foo/code/bar/vendor/index`
+ Downloading rustc-serialize v0.3.16 (registry file:///home/foo/code/bar/vendor/index)
+   Compiling rustc-serialize v0.3.16 (registry file:///home/foo/code/bar/vendor/index)
+   Compiling ...
 ```
 
-This will populate the `vendor` directory (deleting it if it already exists)
-with the index for the "custom registry" as well as a copy of all the crates
-needed. The configuration printed can be placed in any `.cargo/config` to point
-your project at that index, and then all future builds will use that index.
+This will populate the `vendor` directory (generating an error it if it already
+exists) with the index for the "custom registry" as well as a copy of all the
+crates needed. The configuration printed can be placed in any `.cargo/config`
+to point your project at that index, and then all future builds will use that
+index.
 
 ## Drawbacks
 
