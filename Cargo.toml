@@ -2,6 +2,14 @@
 name = "cargo-vendor"
 version = "0.1.0"
 authors = ["Alex Crichton <alex@alexcrichton.com>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+keywords = ["subcommand"]
+repository = "https://github.com/alexcrichton/cargo-vendor"
+description = """
+A Cargo subcommand to vendor all crates.io dependencies onto the local
+filesystem.
+"""
 
 [dependencies]
 cargo = "0.4"
