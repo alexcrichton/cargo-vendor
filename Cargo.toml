@@ -12,7 +12,7 @@ filesystem.
 """
 
 [dependencies]
-cargo = "0.4"
+cargo = "0.*"
 rustc-serialize = "0.3"
-url = "0.2"
-git2 = "0.2"
+url = "0.5"
+git2 = "0.3"
