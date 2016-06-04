@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use cargo::Config;
-use cargo::core::Package;
+use cargo::core::{Package,PackageSet};
 use cargo::core::dependency::Kind;
 use cargo::util::{human, hex, CargoResult, ChainError, Sha256};
 use git2::{self, Repository};
@@ -33,8 +33,8 @@ struct RegistryDependency {
     kind: String,
 }
 
-pub fn vendor(config: &Config,
-              packages: &[Package],
+pub fn vendor<'cfg>(config: &Config,
+              packages: &PackageSet<'cfg>,
               into: &Path) -> CargoResult<()> {
     let index = into.join("index");
     let download = into.join("cache");
@@ -50,7 +50,8 @@ pub fn vendor(config: &Config,
         f.write_all(format!(r#"{{"dl":"{}","api":""}}"#, dl_url).as_bytes())
     }));
 
-    for package in packages {
+    for package_id in packages.package_ids() {
+        let package = try!(packages.get(&package_id));
         try!(vendor_package(config, package, &index, &download).chain_error(|| {
             human(format!("failed to vendor `{}`", package.package_id()))
         }));
@@ -88,7 +89,7 @@ fn vendor_package(config: &Config,
                       .join(package_id.version().to_string())
                       .join("download");
     try!(fs::create_dir_all(dst.parent().unwrap()));
-    try!(fs::copy(&crate_file, &dst).chain_error(|| {
+    try!(fs::copy(&crate_file.clone().into_path_unlocked(), &dst).chain_error(|| {
         human(format!("cached crate file `{}` doesn't exist for `{}`",
                       crate_file.display(), package_id))
     }));
@@ -111,7 +112,7 @@ fn vendor_package(config: &Config,
                 features: d.features().to_vec(),
                 optional: d.is_optional(),
                 default_features: d.uses_default_features(),
-                target: d.only_for_platform().map(|t| t.to_string()),
+                target: d.platform().map(|t| t.to_string()),
                 kind: match d.kind() {
                     Kind::Normal => "normal".to_string(),
                     Kind::Build => "build".to_string(),
