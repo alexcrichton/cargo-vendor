@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::Path;
 
@@ -132,8 +132,8 @@ fn vendor_package(config: &Config,
                   .join(package_id.name()),
     };
     try!(fs::create_dir_all(dst.parent().unwrap()));
-    try!(File::create(&dst).and_then(|mut f| {
-        f.write_all(json.as_bytes())
+    try!(OpenOptions::new().create(true).append(true).open(&dst).and_then(|mut f| {
+        write!(f, "{}\n", json)
     }));
     Ok(())
 }
