@@ -12,7 +12,5 @@ filesystem.
 """
 
 [dependencies]
-cargo = "0.*"
+cargo = "0.11"
 rustc-serialize = "0.3"
-url = "0.5"
-git2 = "0.4"
