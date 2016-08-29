@@ -20,7 +20,7 @@ struct Options {
     arg_path: Option<String>,
     flag_sync: Option<String>,
     flag_host: Option<String>,
-    flag_verbose: Option<bool>,
+    flag_verbose: u32,
     flag_quiet: Option<bool>,
     flag_color: Option<String>,
 }
