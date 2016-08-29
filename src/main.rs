@@ -1,11 +1,12 @@
 extern crate cargo;
 extern crate rustc_serialize;
 
+use std::cmp;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
-use std::collections::BTreeMap;
 
 use rustc_serialize::hex::ToHex;
 use rustc_serialize::json::{self, ToJson};
@@ -116,6 +117,12 @@ fn sync(lockfile: &Path,
                      .filter(|id| id.source_id() == registry_id)
                      .cloned()
                      .collect::<Vec<_>>();
+    let mut max = HashMap::new();
+    for id in ids.iter() {
+        let max = max.entry(id.name()).or_insert(id.version());
+        *max = cmp::max(id.version(), *max)
+    }
+
     for id in ids.iter() {
         // First up, download the package
         let vers = format!("={}", id.version());
@@ -135,7 +142,12 @@ fn sync(lockfile: &Path,
         // Next up, copy it to the vendor directory
         let name = format!("{}-{}", id.name(), id.version());
         let src = src.join(&name).into_path_unlocked();
-        let dst = local_dst.join(&name);
+        let dst_name = if id.version() == max[id.name()] {
+            id.name().to_string()
+        } else {
+            format!("{}-{}", id.name(), id.version())
+        };
+        let dst = local_dst.join(&dst_name);
         let cksum = dst.join(".cargo-checksum.json");
         if cksum.exists() {
             continue
