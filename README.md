@@ -1,5 +1,8 @@
 # cargo-vendor
 
+[![Build Status](https://travis-ci.org/alexcrichton/cargo-vendor.svg?branch=master)](https://travis-ci.org/alexcrichton/cargo-vendor)
+[![Build status](https://ci.appveyor.com/api/projects/status/0sqqqnkfgw4o3cvs?svg=true)](https://ci.appveyor.com/project/alexcrichton/cargo-vendor)
+
 This is a [Cargo](http://doc.crates.io) subcommand which
 vendosr all [crates.io](https://crates.io) dependencies into a local directory
 using Cargo's support for [source
