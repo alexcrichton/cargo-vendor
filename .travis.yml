@@ -15,6 +15,10 @@ addons:
       - kalakris-cmake
     packages:
       - cmake
-os:
-  - linux
-  - osx
+matrix:
+  include:
+    - os: osx
+      rust: stable
+      before_install:
+        - export OPENSSL_INCLUDE_DIR=`brew --prefix openssl`/include
+        - export OPENSSL_LIB_DIR=`brew --prefix openssl`/lib
