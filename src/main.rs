@@ -180,6 +180,14 @@ fn cp_r(src: &Path,
     try!(fs::create_dir(dst));
     for entry in try!(src.read_dir()) {
         let entry = try!(entry);
+
+        // Skip .gitattributes as they're not relevant to builds most of the
+        // time and if we respect them (e.g. in git) then it'll probably mess
+        // with the checksums.
+        if entry.file_name().to_str() == Some(".gitattributes") {
+            continue
+        }
+
         let src = entry.path();
         let dst = dst.join(entry.file_name());
         if try!(entry.file_type()).is_dir() {
