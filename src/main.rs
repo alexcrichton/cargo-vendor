@@ -126,8 +126,9 @@ fn sync(lockfile: &Path,
     for id in ids.iter() {
         // First up, download the package
         let vers = format!("={}", id.version());
-        let dep = try!(Dependency::parse(id.name(), Some(&vers[..]),
-                                         id.source_id()));
+        let dep = try!(Dependency::parse_no_deprecated(id.name(),
+                                                       Some(&vers[..]),
+                                                       id.source_id()));
         let vec = try!(registry.query(&dep));
         if vec.len() == 0 {
             return Err(human(format!("could not find package: {}", id)))

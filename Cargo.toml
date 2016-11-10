@@ -12,5 +12,5 @@ filesystem.
 """
 
 [dependencies]
-cargo = "0.13"
+cargo = { git = "https://github.com/rust-lang/cargo" }
 rustc-serialize = "0.3"
