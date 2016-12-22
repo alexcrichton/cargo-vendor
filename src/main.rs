@@ -23,6 +23,7 @@ struct Options {
     flag_host: Option<String>,
     flag_verbose: u32,
     flag_quiet: Option<bool>,
+    flag_explicit_version: Option<bool>,
     flag_color: Option<String>,
 }
 
@@ -39,6 +40,7 @@ Options:
     --host HOST              Registry index to sync with
     -v, --verbose            Use verbose output
     -q, --quiet              No output printed to stdout
+    -x, --explicit-version   Always include version in subdir name
     --color WHEN             Coloring: auto, always, never
 "#)
 }
@@ -73,11 +75,13 @@ fn real_main(options: Options, config: &Config) -> CliResult<Option<()>> {
         }
     };
 
-    try!(sync(Path::new(lockfile), &path, &id, config).chain_error(|| {
+    let explicit = options.flag_explicit_version.unwrap_or(false);
+    try!(sync(Path::new(lockfile), &path, &id, config, explicit).chain_error(|| {
         human("failed to sync")
     }));
 
-    println!("add this to your .cargo/config for this project:
+    if !options.flag_quiet.unwrap_or(false) {
+        println!("add this to your .cargo/config for this project:
 
     [source.crates-io]
     registry = '{}'
@@ -87,6 +91,7 @@ fn real_main(options: Options, config: &Config) -> CliResult<Option<()>> {
     directory = '{}'
 
 ", id.url(), config.cwd().join(path).display());
+    }
 
     Ok(None)
 }
@@ -94,7 +99,8 @@ fn real_main(options: Options, config: &Config) -> CliResult<Option<()>> {
 fn sync(lockfile: &Path,
         local_dst: &Path,
         registry_id: &SourceId,
-        config: &Config) -> CargoResult<()> {
+        config: &Config,
+        explicit_version: bool) -> CargoResult<()> {
     let mut registry = registry_id.load(config);
     let manifest = lockfile.parent().unwrap().join("Cargo.toml");
     let manifest = env::current_dir().unwrap().join(&manifest);
@@ -143,7 +149,7 @@ fn sync(lockfile: &Path,
         // Next up, copy it to the vendor directory
         let name = format!("{}-{}", id.name(), id.version());
         let src = src.join(&name).into_path_unlocked();
-        let dst_name = if id.version() == max[id.name()] {
+        let dst_name = if !explicit_version && id.version() == max[id.name()] {
             id.name().to_string()
         } else {
             format!("{}-{}", id.name(), id.version())
