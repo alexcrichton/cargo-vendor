@@ -4,7 +4,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/0sqqqnkfgw4o3cvs?svg=true)](https://ci.appveyor.com/project/alexcrichton/cargo-vendor)
 
 This is a [Cargo](http://doc.crates.io) subcommand which
-vendosr all [crates.io](https://crates.io) dependencies into a local directory
+vendors all [crates.io](https://crates.io) dependencies into a local directory
 using Cargo's support for [source
 replacement](http://doc.crates.io/source-replacement.html).
 
