@@ -135,7 +135,20 @@ fn sync(lockfile: &Path,
         let dep = try!(Dependency::parse_no_deprecated(id.name(),
                                                        Some(&vers[..]),
                                                        id.source_id()));
-        let vec = try!(registry.query(&dep));
+        let mut vec = try!(registry.query(&dep));
+
+        // Some versions have "build metadata" which is ignored by semver when
+        // matching. That means that `vec` being returned may have more than one
+        // element, so we filter out all non-equivalent versions with different
+        // build metadata than the one we're looking for.
+        //
+        // Note that we also don't compare semver versions directly as the
+        // default equality ignores build metadata.
+        if vec.len() > 1 {
+            vec.retain(|version| {
+                version.package_id().version().to_string() == id.version().to_string()
+            });
+        }
         if vec.len() == 0 {
             return Err(human(format!("could not find package: {}", id)))
         }
