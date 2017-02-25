@@ -214,7 +214,7 @@ fn cp_r(src: &Path,
         } else {
             try!(fs::copy(&src, &dst));
             let rel = dst.strip_prefix(root).unwrap().to_str().unwrap();
-            cksums.insert(rel.to_string(), try!(sha256(&dst)));
+            cksums.insert(rel.replace("\\", "/"), try!(sha256(&dst)));
         }
     }
     Ok(())
