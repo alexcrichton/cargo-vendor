@@ -1,4 +1,5 @@
 extern crate cargo;
+extern crate env_logger;
 extern crate rustc_serialize;
 
 use std::cmp;
@@ -28,7 +29,10 @@ struct Options {
 }
 
 fn main() {
-    cargo::execute_main_without_stdin(real_main, false, r#"
+    env_logger::init().unwrap();
+    let config = Config::default().unwrap();
+    let args = env::args().collect::<Vec<_>>();
+    let result = cargo::call_main_without_stdin(real_main, &config, r#"
 Vendor all dependencies for a project locally
 
 Usage:
@@ -42,10 +46,14 @@ Options:
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
     --color WHEN             Coloring: auto, always, never
-"#)
+"#, &args, true);
+
+    if let Err(e) = result {
+        cargo::handle_cli_error(e, &mut *config.shell());
+    }
 }
 
-fn real_main(options: Options, config: &Config) -> CliResult<Option<()>> {
+fn real_main(options: Options, config: &Config) -> CliResult {
     try!(config.configure(options.flag_verbose,
                           options.flag_quiet,
                           &options.flag_color,
@@ -93,7 +101,7 @@ fn real_main(options: Options, config: &Config) -> CliResult<Option<()>> {
 ", id.url(), config.cwd().join(path).display());
     }
 
-    Ok(None)
+    Ok(())
 }
 
 fn sync(lockfile: &Path,
