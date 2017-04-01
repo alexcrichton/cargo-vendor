@@ -42,11 +42,11 @@ Options:
     -h, --help               Print this message
     -s, --sync LOCK          Sync the registry with LOCK
     --host HOST              Registry index to sync with
-    -v, --verbose            Use verbose output
+    -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
     --color WHEN             Coloring: auto, always, never
-"#, &args, true);
+"#, &args, false);
 
     if let Err(e) = result {
         cargo::handle_cli_error(e, &mut *config.shell());
