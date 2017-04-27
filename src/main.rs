@@ -49,7 +49,7 @@ Options:
 "#, &args, false);
 
     if let Err(e) = result {
-        cargo::handle_cli_error(e, &mut *config.shell());
+        cargo::exit_with_error(e, &mut *config.shell());
     }
 }
 
