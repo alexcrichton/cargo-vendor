@@ -16,6 +16,10 @@ Currently this can be installed with:
 $ cargo install cargo-vendor
 ```
 
+You can also install [precompiled
+binaries](https://github.com/alexcrichton/cargo-vendor/releases) that are
+assembled on the CI for this crate.
+
 ## Example Usage
 
 Simply run `cargo vendor` inside of any Cargo project:
