@@ -85,7 +85,7 @@ fn vendor_simple() {
     assert_vendor_works(&dir);
 }
 
-fn assert_vendor_works(dir: &Path) {
+fn add_vendor_config(dir: &Path) {
     file(&dir, ".cargo/config", r#"
         [source.crates-io]
         replace-with = 'vendor'
@@ -93,6 +93,10 @@ fn assert_vendor_works(dir: &Path) {
         [source.vendor]
         directory = 'vendor'
     "#);
+}
+
+fn assert_vendor_works(dir: &Path) {
+    add_vendor_config(dir);
     run(Command::new("cargo").arg("build").current_dir(&dir));
 }
 
@@ -169,4 +173,44 @@ fn update_versions() {
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
     assert!(lock.contains("version = \"0.8.0\""));
+}
+
+#[test]
+fn two_lockfiles() {
+    let dir = dir();
+
+    file(&dir, "foo/Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.7.0"
+    "#);
+    file(&dir, "foo/src/lib.rs", "");
+    file(&dir, "bar/Cargo.toml", r#"
+        [package]
+        name = "bar"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.8.0"
+    "#);
+    file(&dir, "bar/src/lib.rs", "");
+
+    run(Command::new("cargo").arg("generate-lockfile")
+            .current_dir(&dir.join("foo")));
+    run(Command::new("cargo").arg("generate-lockfile")
+            .current_dir(&dir.join("bar")));
+    run(vendor(&dir).arg("-s").arg("foo/Cargo.lock")
+                    .arg("-s").arg("bar/Cargo.lock"));
+
+    let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
+    assert!(lock.contains("version = \"0.8.0\""));
+    let lock = read(&dir.join("vendor/bitflags-0.7.0/Cargo.toml"));
+    assert!(lock.contains("version = \"0.7.0\""));
+
+    add_vendor_config(&dir);
+    run(Command::new("cargo").arg("build").current_dir(&dir.join("foo")));
+    run(Command::new("cargo").arg("build").current_dir(&dir.join("bar")));
 }

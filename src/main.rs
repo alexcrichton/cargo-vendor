@@ -3,7 +3,7 @@ extern crate env_logger;
 extern crate rustc_serialize;
 
 use std::cmp;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -20,7 +20,7 @@ use cargo::util::Sha256;
 #[derive(RustcDecodable)]
 struct Options {
     arg_path: Option<String>,
-    flag_sync: Option<String>,
+    flag_sync: Vec<String>,
     flag_host: Option<String>,
     flag_verbose: u32,
     flag_quiet: Option<bool>,
@@ -40,7 +40,7 @@ Usage:
 
 Options:
     -h, --help               Print this message
-    -s, --sync LOCK          Sync the registry with LOCK
+    -s, --sync LOCK ...      Sync the registry with LOCK
     --host HOST              Registry index to sync with
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
@@ -72,19 +72,17 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         SourceId::crates_io(config)
     }));
 
-    let lockfile = match options.flag_sync {
-        Some(ref file) => file,
-        None => {
-            try!(fs::metadata("Cargo.lock").chain_error(|| {
-                human("could not find `Cargo.lock`, must be run in a directory \
-                       with Cargo.lock or use the `--sync` option")
-            }));
-            "Cargo.lock"
-        }
-    };
+    let mut lockfiles = options.flag_sync;
+    if lockfiles.len() == 0 {
+        try!(fs::metadata("Cargo.lock").chain_error(|| {
+            human("could not find `Cargo.lock`, must be run in a directory \
+                   with Cargo.lock or use the `--sync` option")
+        }));
+        lockfiles.push("Cargo.lock".into());
+    }
 
     let explicit = options.flag_explicit_version.unwrap_or(false);
-    try!(sync(Path::new(lockfile), &path, &id, config, explicit).chain_error(|| {
+    try!(sync(&lockfiles, &path, &id, config, explicit).chain_error(|| {
         human("failed to sync")
     }));
 
@@ -104,21 +102,30 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     Ok(())
 }
 
-fn sync(lockfile: &Path,
+fn sync(lockfiles: &[String],
         local_dst: &Path,
         registry_id: &SourceId,
         config: &Config,
         explicit_version: bool) -> CargoResult<()> {
+    let mut ids = BTreeSet::new();
     let mut registry = registry_id.load(config);
-    let manifest = lockfile.parent().unwrap().join("Cargo.toml");
-    let manifest = env::current_dir().unwrap().join(&manifest);
-    let ws = try!(Workspace::new(&manifest, config));
-    let resolve = try!(cargo::ops::load_pkg_lockfile(&ws).chain_error(|| {
-        human("failed to load pkg lockfile")
-    }));
-    let resolve = try!(resolve.chain_error(|| {
-        human(format!("lock file `{}` does not exist", lockfile.display()))
-    }));
+
+    for lockfile in lockfiles {
+        let lockfile = Path::new(lockfile);
+        let manifest = lockfile.parent().unwrap().join("Cargo.toml");
+        let manifest = env::current_dir().unwrap().join(&manifest);
+        let ws = try!(Workspace::new(&manifest, config));
+        let resolve = try!(cargo::ops::load_pkg_lockfile(&ws).chain_error(|| {
+            human("failed to load pkg lockfile")
+        }));
+        let resolve = try!(resolve.chain_error(|| {
+            human(format!("lock file `{}` does not exist", lockfile.display()))
+        }));
+
+        ids.extend(resolve.iter()
+                     .filter(|id| id.source_id() == registry_id)
+                     .cloned());
+    }
 
     let hash = cargo::util::hex::short_hash(registry_id);
     let ident = registry_id.url().host().unwrap().to_string();
@@ -126,12 +133,6 @@ fn sync(lockfile: &Path,
 
     let src = config.registry_source_path().join(&part);
     let cache = config.registry_cache_path().join(&part);
-
-    let mut ids = resolve.iter()
-                     .filter(|id| id.source_id() == registry_id)
-                     .cloned()
-                     .collect::<Vec<_>>();
-    ids.sort();
 
     let mut max = HashMap::new();
     for id in ids.iter() {
