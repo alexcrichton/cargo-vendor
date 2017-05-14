@@ -20,12 +20,14 @@ use cargo::util::Sha256;
 #[derive(RustcDecodable)]
 struct Options {
     arg_path: Option<String>,
-    flag_sync: Vec<String>,
+    flag_sync: Option<Vec<String>>,
     flag_host: Option<String>,
     flag_verbose: u32,
     flag_quiet: Option<bool>,
     flag_explicit_version: Option<bool>,
     flag_color: Option<String>,
+    flag_frozen: bool,
+    flag_locked: bool,
 }
 
 fn main() {
@@ -40,18 +42,21 @@ Usage:
 
 Options:
     -h, --help               Print this message
-    -s, --sync LOCK ...      Sync the registry with LOCK
+    -s, --sync TOML ...      Sync the `Cargo.toml` or `Cargo.lock` specified
     --host HOST              Registry index to sync with
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
+    --frozen                 Require Cargo.lock and cache are up to date
+    --locked                 Require Cargo.lock is up to date
     --color WHEN             Coloring: auto, always, never
 
 This cargo subcommand will vendor all crates.io dependencies for a project into
-the specified directory at `<path>`. The `cargo vendor` command requires that
-a `Cargo.lock` already exists and it will ensure that after the command
-completes the vendor directory specified by `<path>` will contain all sources
-necessary to build the project from crates.io.
+the specified directory at `<path>`. The `cargo vendor` command is intended to
+be run in the same directory as `Cargo.toml`, but the manifest can also be
+specified via the `--sync` flag. After this command completes the vendor
+directory specified by `<path>` will contain all sources from crates.io
+necessary to build the manifests specified.
 
 The `cargo vendor` command will also print out the configuration necessary
 to use the vendored sources, which when needed is then encoded into
@@ -67,8 +72,8 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     try!(config.configure(options.flag_verbose,
                           options.flag_quiet,
                           &options.flag_color,
-                          /* frozen = */ false,
-                          /* locked = */ false));
+                          options.flag_frozen,
+                          options.flag_locked));
 
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
@@ -82,17 +87,26 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         SourceId::crates_io(config)
     }));
 
-    let mut lockfiles = options.flag_sync;
-    if lockfiles.len() == 0 {
-        try!(fs::metadata("Cargo.lock").chain_error(|| {
-            human("could not find `Cargo.lock`, must be run in a directory \
-                   with Cargo.lock or use the `--sync` option")
-        }));
-        lockfiles.push("Cargo.lock".into());
-    }
+    let workspaces = match options.flag_sync {
+        Some(list) => {
+            list.iter().map(|path| {
+                let path = Path::new(path);
+                let manifest = if path.ends_with("Cargo.lock") {
+                    config.cwd().join(path.with_file_name("Cargo.toml"))
+                } else {
+                    config.cwd().join(path)
+                };
+                Workspace::new(&manifest, config)
+            }).collect::<CargoResult<Vec<_>>>()?
+        }
+        None => {
+            let manifest = config.cwd().join("Cargo.toml");
+            vec![Workspace::new(&manifest, config)?]
+        }
+    };
 
     let explicit = options.flag_explicit_version.unwrap_or(false);
-    try!(sync(&lockfiles, &path, &id, config, explicit).chain_error(|| {
+    try!(sync(&workspaces, &path, &id, config, explicit).chain_error(|| {
         human("failed to sync")
     }));
 
@@ -112,7 +126,7 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     Ok(())
 }
 
-fn sync(lockfiles: &[String],
+fn sync(workspaces: &[Workspace],
         local_dst: &Path,
         registry_id: &SourceId,
         config: &Config,
@@ -120,18 +134,10 @@ fn sync(lockfiles: &[String],
     let mut ids = BTreeSet::new();
     let mut registry = registry_id.load(config);
 
-    for lockfile in lockfiles {
-        let lockfile = Path::new(lockfile);
-        let manifest = lockfile.parent().unwrap().join("Cargo.toml");
-        let manifest = env::current_dir().unwrap().join(&manifest);
-        let ws = try!(Workspace::new(&manifest, config));
-        let resolve = try!(cargo::ops::load_pkg_lockfile(&ws).chain_error(|| {
+    for ws in workspaces {
+        let (_, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_error(|| {
             human("failed to load pkg lockfile")
         }));
-        let resolve = try!(resolve.chain_error(|| {
-            human(format!("lock file `{}` does not exist", lockfile.display()))
-        }));
-
         ids.extend(resolve.iter()
                      .filter(|id| id.source_id() == registry_id)
                      .cloned());

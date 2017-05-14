@@ -76,7 +76,6 @@ fn vendor_simple() {
     "#);
     file(&dir, "src/lib.rs", "");
 
-    run(Command::new("cargo").arg("generate-lockfile").current_dir(&dir));
     run(&mut vendor(&dir));
 
     let lock = read(&dir.join("vendor/log/Cargo.toml"));
@@ -124,7 +123,6 @@ fn two_versions() {
     "#);
     file(&dir, "bar/src/lib.rs", "");
 
-    run(Command::new("cargo").arg("generate-lockfile").current_dir(&dir));
     run(&mut vendor(&dir));
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
@@ -154,7 +152,6 @@ fn update_versions() {
     "#);
     file(&dir, "src/lib.rs", "");
 
-    run(Command::new("cargo").arg("generate-lockfile").current_dir(&dir));
     run(&mut vendor(&dir));
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
@@ -168,7 +165,6 @@ fn update_versions() {
         [dependencies]
         bitflags = "=0.8.0"
     "#);
-    run(Command::new("cargo").arg("generate-lockfile").current_dir(&dir));
     run(&mut vendor(&dir));
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
@@ -198,12 +194,8 @@ fn two_lockfiles() {
     "#);
     file(&dir, "bar/src/lib.rs", "");
 
-    run(Command::new("cargo").arg("generate-lockfile")
-            .current_dir(&dir.join("foo")));
-    run(Command::new("cargo").arg("generate-lockfile")
-            .current_dir(&dir.join("bar")));
-    run(vendor(&dir).arg("-s").arg("foo/Cargo.lock")
-                    .arg("-s").arg("bar/Cargo.lock"));
+    run(vendor(&dir).arg("-s").arg("foo/Cargo.toml")
+                    .arg("-s").arg("bar/Cargo.toml"));
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
     assert!(lock.contains("version = \"0.8.0\""));
