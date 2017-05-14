@@ -46,6 +46,16 @@ Options:
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
     --color WHEN             Coloring: auto, always, never
+
+This cargo subcommand will vendor all crates.io dependencies for a project into
+the specified directory at `<path>`. The `cargo vendor` command requires that
+a `Cargo.lock` already exists and it will ensure that after the command
+completes the vendor directory specified by `<path>` will contain all sources
+necessary to build the project from crates.io.
+
+The `cargo vendor` command will also print out the configuration necessary
+to use the vendored sources, which when needed is then encoded into
+`.cargo/config`.
 "#, &args, false);
 
     if let Err(e) = result {
