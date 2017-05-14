@@ -199,7 +199,8 @@ fn sync(lockfiles: &[String],
             continue
         }
 
-        println!("Vendoring {} to {}", id, dst.display());
+        config.shell().status("Vendoring",
+                              &format!("{} to {}", id, dst.display()))?;
 
         let _ = fs::remove_dir_all(&dst);
         let mut map = BTreeMap::new();
