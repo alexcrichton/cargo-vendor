@@ -1,6 +1,6 @@
 [root]
 name = "cargo-vendor"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cargo 0.20.0 (git+https://github.com/rust-lang/cargo)",
  "env_logger 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
