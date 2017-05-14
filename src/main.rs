@@ -1,16 +1,17 @@
 extern crate cargo;
 extern crate env_logger;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_json;
 
 use std::cmp;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
 
 use rustc_serialize::hex::ToHex;
-use rustc_serialize::json::{self, ToJson};
 
 use cargo::core::{SourceId, Dependency, Workspace};
 use cargo::CliResult;
@@ -181,20 +182,21 @@ fn sync(lockfile: &Path,
             continue
         }
         let _ = fs::remove_dir_all(&dst);
-        let mut map = BTreeMap::new();
+        let mut map = HashMap::new();
         try!(cp_r(&src, &dst, &dst, &mut map).chain_error(|| {
             human(format!("failed to copy over vendored sources for: {}", id))
         }));
 
         // Finally, emit the metadata about this package
-        let mut json = BTreeMap::new();
         let crate_file = format!("{}-{}.crate", id.name(), id.version());
         let crate_file = cache.join(&crate_file).into_path_unlocked();
-        json.insert("package", try!(sha256(&crate_file)).to_json());
-        json.insert("files", map.to_json());
-        let json = json::encode(&json).unwrap();
 
-        try!(try!(File::create(&cksum)).write_all(json.as_bytes()));
+        let json = json!({
+            "package": try!(sha256(&crate_file)),
+            "files": map,
+        });
+
+        try!(try!(File::create(&cksum)).write_all(json.to_string().as_bytes()));
     }
 
     Ok(())
@@ -203,7 +205,7 @@ fn sync(lockfile: &Path,
 fn cp_r(src: &Path,
         dst: &Path,
         root: &Path,
-        cksums: &mut BTreeMap<String, String>) -> io::Result<()> {
+        cksums: &mut HashMap<String, String>) -> io::Result<()> {
     try!(fs::create_dir(dst));
     for entry in try!(src.read_dir()) {
         let entry = try!(entry);
