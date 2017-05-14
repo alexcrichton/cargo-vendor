@@ -89,7 +89,7 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     }));
 
     if !options.flag_quiet.unwrap_or(false) {
-        println!("add this to your .cargo/config for this project:
+        println!("To use vendored sources, add this to your .cargo/config for this project:
 
     [source.crates-io]
     registry = '{}'
@@ -127,10 +127,12 @@ fn sync(lockfile: &Path,
     let src = config.registry_source_path().join(&part);
     let cache = config.registry_cache_path().join(&part);
 
-    let ids = resolve.iter()
+    let mut ids = resolve.iter()
                      .filter(|id| id.source_id() == registry_id)
                      .cloned()
                      .collect::<Vec<_>>();
+    ids.sort();
+
     let mut max = HashMap::new();
     for id in ids.iter() {
         let max = max.entry(id.name()).or_insert(id.version());
@@ -170,16 +172,24 @@ fn sync(lockfile: &Path,
         // Next up, copy it to the vendor directory
         let name = format!("{}-{}", id.name(), id.version());
         let src = src.join(&name).into_path_unlocked();
-        let dst_name = if !explicit_version && id.version() == max[id.name()] {
-            id.name().to_string()
-        } else {
+        let dir_has_version_suffix = explicit_version || id.version() != max[id.name()];
+        let dst_name = if dir_has_version_suffix {
+            // Eg vendor/futures-0.1.13
             format!("{}-{}", id.name(), id.version())
+        } else {
+            // Eg vendor/futures
+            id.name().to_string()
         };
         let dst = local_dst.join(&dst_name);
+
         let cksum = dst.join(".cargo-checksum.json");
-        if cksum.exists() {
+        if dir_has_version_suffix && cksum.exists() {
+            // Always re-copy directory without version suffix in case the version changed
             continue
         }
+
+        println!("Vendoring {} to {}", id, dst.display());
+
         let _ = fs::remove_dir_all(&dst);
         let mut map = BTreeMap::new();
         try!(cp_r(&src, &dst, &dst, &mut map).chain_error(|| {
