@@ -206,3 +206,35 @@ fn two_lockfiles() {
     run(Command::new("cargo").arg("build").current_dir(&dir.join("foo")));
     run(Command::new("cargo").arg("build").current_dir(&dir.join("bar")));
 }
+
+#[test]
+fn revendor_with_config() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.7.0"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
+    assert!(lock.contains("version = \"0.7.0\""));
+
+    add_vendor_config(&dir);
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.8.0"
+    "#);
+    run(&mut vendor(&dir));
+    let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
+    assert!(lock.contains("version = \"0.8.0\""));
+}
