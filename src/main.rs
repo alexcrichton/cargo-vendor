@@ -1,6 +1,8 @@
 extern crate cargo;
 extern crate env_logger;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_json;
 
 use std::cmp;
 use std::collections::{BTreeMap, HashMap, BTreeSet};
@@ -10,7 +12,6 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 
 use rustc_serialize::hex::ToHex;
-use rustc_serialize::json::{self, ToJson};
 
 use cargo::core::{SourceId, Dependency, Workspace};
 use cargo::CliResult;
@@ -228,14 +229,15 @@ fn sync(workspaces: &[Workspace],
         }));
 
         // Finally, emit the metadata about this package
-        let mut json = BTreeMap::new();
         let crate_file = format!("{}-{}.crate", id.name(), id.version());
         let crate_file = cache.join(&crate_file).into_path_unlocked();
-        json.insert("package", try!(sha256(&crate_file)).to_json());
-        json.insert("files", map.to_json());
-        let json = json::encode(&json).unwrap();
 
-        try!(try!(File::create(&cksum)).write_all(json.as_bytes()));
+        let json = json!({
+            "package": try!(sha256(&crate_file)),
+            "files": map,
+        });
+
+        try!(try!(File::create(&cksum)).write_all(json.to_string().as_bytes()));
     }
 
     Ok(())
