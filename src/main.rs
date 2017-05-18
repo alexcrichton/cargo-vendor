@@ -21,6 +21,7 @@ use cargo::util::Sha256;
 #[derive(RustcDecodable)]
 struct Options {
     arg_path: Option<String>,
+    flag_version: bool,
     flag_sync: Option<Vec<String>>,
     flag_host: Option<String>,
     flag_verbose: u32,
@@ -56,6 +57,7 @@ Usage:
 
 Options:
     -h, --help               Print this message
+    -V, --version            Print version information
     -s, --sync TOML ...      Sync the `Cargo.toml` or `Cargo.lock` specified
     --host HOST              Registry index to sync with
     -v, --verbose ...        Use verbose output
@@ -83,6 +85,11 @@ to use the vendored sources, which when needed is then encoded into
 }
 
 fn real_main(options: Options, config: &Config) -> CliResult {
+    if options.flag_version {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     try!(config.configure(options.flag_verbose,
                           options.flag_quiet,
                           &options.flag_color,
