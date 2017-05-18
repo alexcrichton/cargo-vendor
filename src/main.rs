@@ -21,6 +21,7 @@ use cargo::util::Sha256;
 #[derive(RustcDecodable)]
 struct Options {
     arg_path: Option<String>,
+    flag_no_delete: Option<bool>,
     flag_version: bool,
     flag_sync: Option<Vec<String>>,
     flag_host: Option<String>,
@@ -63,6 +64,7 @@ Options:
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
+    --no-delete              Don't delete older crates in the vendor directory
     --frozen                 Require Cargo.lock and cache are up to date
     --locked                 Require Cargo.lock is up to date
     --color WHEN             Coloring: auto, always, never
@@ -126,8 +128,12 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         }
     };
 
-    let explicit = options.flag_explicit_version.unwrap_or(false);
-    try!(sync(&workspaces, &path, &id, config, explicit).chain_error(|| {
+    try!(sync(&workspaces,
+              &path,
+              &id,
+              config,
+              options.flag_explicit_version.unwrap_or(false),
+              options.flag_no_delete.unwrap_or(false)).chain_error(|| {
         human("failed to sync")
     }));
 
@@ -151,7 +157,8 @@ fn sync(workspaces: &[Workspace],
         local_dst: &Path,
         registry_id: &SourceId,
         config: &Config,
-        explicit_version: bool) -> CargoResult<()> {
+        explicit_version: bool,
+        no_delete: bool) -> CargoResult<()> {
     let mut ids = BTreeSet::new();
     let mut registry = registry_id.load(config);
 
@@ -177,6 +184,14 @@ fn sync(workspaces: &[Workspace],
         *max = cmp::max(id.version(), *max)
     }
 
+    let existing_crates = local_dst.read_dir().map(|iter| {
+        iter.filter_map(|e| e.ok())
+            .filter(|e| e.path().join("Cargo.toml").exists())
+            .map(|e| e.path())
+            .collect::<Vec<_>>()
+    }).unwrap_or(Vec::new());
+
+    let mut added_crates = Vec::new();
     for id in ids.iter() {
         // First up, download the package
         let vers = format!("={}", id.version());
@@ -219,6 +234,7 @@ fn sync(workspaces: &[Workspace],
             id.name().to_string()
         };
         let dst = local_dst.join(&dst_name);
+        added_crates.push(dst.clone());
 
         let cksum = dst.join(".cargo-checksum.json");
         if dir_has_version_suffix && cksum.exists() {
@@ -245,6 +261,14 @@ fn sync(workspaces: &[Workspace],
         });
 
         try!(try!(File::create(&cksum)).write_all(json.to_string().as_bytes()));
+    }
+
+    if !no_delete {
+        for path in existing_crates {
+            if !added_crates.contains(&path) {
+                try!(fs::remove_dir_all(&path));
+            }
+        }
     }
 
     Ok(())

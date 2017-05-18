@@ -238,3 +238,35 @@ fn revendor_with_config() {
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
     assert!(lock.contains("version = \"0.8.0\""));
 }
+
+#[test]
+fn delete_old_crates() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.7.0"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    read(&dir.join("vendor/bitflags/Cargo.toml"));
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        log = "=0.3.5"
+    "#);
+
+    run(&mut vendor(&dir));
+    let lock = read(&dir.join("vendor/log/Cargo.toml"));
+    assert!(lock.contains("version = \"0.3.5\""));
+    assert!(!dir.join("vendor/bitflags/Cargo.toml").exists());
+}
