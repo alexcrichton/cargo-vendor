@@ -282,11 +282,13 @@ fn cp_r(src: &Path,
     for entry in try!(src.read_dir()) {
         let entry = try!(entry);
 
-        // Skip .gitattributes as they're not relevant to builds most of the
+        // Skip git config files as they're not relevant to builds most of the
         // time and if we respect them (e.g. in git) then it'll probably mess
         // with the checksums.
-        if entry.file_name().to_str() == Some(".gitattributes") {
-            continue
+        match entry.file_name().to_str() {
+            Some(".gitattribute") => continue,
+            Some(".gitignore") => continue,
+            _ => ()
         }
 
         let src = entry.path();
