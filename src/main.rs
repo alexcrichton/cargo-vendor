@@ -3,9 +3,12 @@ extern crate env_logger;
 extern crate rustc_serialize;
 #[macro_use]
 extern crate serde_json;
+extern crate toml;
+#[macro_use]
+extern crate maplit;
 
 use std::cmp;
-use std::collections::{BTreeMap, HashMap, BTreeSet};
+use std::collections::{BTreeMap, HashMap, HashSet, BTreeSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -13,9 +16,9 @@ use std::path::Path;
 
 use rustc_serialize::hex::ToHex;
 
-use cargo::core::{SourceId, Dependency, Workspace};
+use cargo::core::{SourceId, Workspace, Package, GitReference};
 use cargo::CliResult;
-use cargo::util::{ToUrl, Config, CargoResult, CargoResultExt};
+use cargo::util::{human, ChainError, Config, CargoResult};
 use cargo::util::Sha256;
 
 #[derive(RustcDecodable)]
@@ -104,11 +107,6 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     try!(fs::create_dir_all(&path).chain_err(|| {
         format!("failed to create: `{}`", path.display())
     }));
-    let id = try!(options.flag_host.map(|s| {
-        s.to_url().map(|url| SourceId::for_registry(&url))
-    }).unwrap_or_else(|| {
-        SourceId::crates_io(config)
-    }));
 
     let workspaces = match options.flag_sync {
         Some(list) => {
@@ -128,9 +126,8 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         }
     };
 
-    try!(sync(&workspaces,
+    let cargo_config = try!(sync(&workspaces,
               &path,
-              &id,
               config,
               options.flag_explicit_version.unwrap_or(false),
               options.flag_no_delete.unwrap_or(false)).chain_err(|| {
@@ -140,49 +137,46 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     if !options.flag_quiet.unwrap_or(false) {
         println!("To use vendored sources, add this to your .cargo/config for this project:
 
-    [source.crates-io]
-    registry = '{}'
-    replace-with = 'vendored-sources'
-
-    [source.vendored-sources]
-    directory = '{}'
-
-", id.url(), config.cwd().join(path).display());
+{}", indent_string(4, &cargo_config));
     }
 
     Ok(())
 }
 
+fn indent_string(amount: usize, data: &str) -> String {
+    data.lines().map(|l| " ".repeat(amount) + l + "\n").collect()
+}
+
 fn sync(workspaces: &[Workspace],
         local_dst: &Path,
-        registry_id: &SourceId,
         config: &Config,
         explicit_version: bool,
-        no_delete: bool) -> CargoResult<()> {
-    let mut ids = BTreeSet::new();
-    let mut registry = registry_id.load(config);
+        no_delete: bool) -> CargoResult<String> {
+    let skip = workspaces.iter().flat_map(Workspace::members).map(Package::package_id).collect::<HashSet<_>>();
 
+    let mut ids = BTreeMap::new();
     for ws in workspaces {
-        let (_, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_err(|| {
-            "failed to load pkg lockfile"
+        let (packages, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_error(|| {
+            human("failed to load pkg lockfile")
         }));
-        ids.extend(resolve.iter()
-                     .filter(|id| id.source_id() == registry_id)
-                     .cloned());
+        for id in resolve.iter() {
+            if skip.contains(id) { continue }
+
+            let pkg = packages.get(id).chain_error(|| {
+                human(format!("failed to fetch package"))
+            })?;
+
+            ids.insert(id.clone(), pkg.clone());
+        }
     }
 
-    // https://github.com/rust-lang/cargo/blob/373c5d8ce43691f90929a74b047d7eababd04379/src/cargo/sources/registry/mod.rs#L248
-    let hash = cargo::util::hex::short_hash(registry_id);
-    let ident = registry_id.url().host_str().unwrap_or("").to_string();
-    let part = format!("{}-{}", ident, hash);
-
-    let src = config.registry_source_path().join(&part);
-    let cache = config.registry_cache_path().join(&part);
-
     let mut max = HashMap::new();
-    for id in ids.iter() {
+    let mut sources = BTreeSet::new();
+    for id in ids.keys() {
         let max = max.entry(id.name()).or_insert(id.version());
-        *max = cmp::max(id.version(), *max)
+        *max = cmp::max(id.version(), *max);
+
+        sources.insert(id.source_id());
     }
 
     let existing_crates = local_dst.read_dir().map(|iter| {
@@ -193,39 +187,9 @@ fn sync(workspaces: &[Workspace],
     }).unwrap_or(Vec::new());
 
     let mut added_crates = Vec::new();
-    for id in ids.iter() {
-        // First up, download the package
-        let vers = format!("={}", id.version());
-        let dep = try!(Dependency::parse_no_deprecated(id.name(),
-                                                       Some(&vers[..]),
-                                                       id.source_id()));
-        let mut vec = try!(registry.query_vec(&dep));
-
-        // Some versions have "build metadata" which is ignored by semver when
-        // matching. That means that `vec` being returned may have more than one
-        // element, so we filter out all non-equivalent versions with different
-        // build metadata than the one we're looking for.
-        //
-        // Note that we also don't compare semver versions directly as the
-        // default equality ignores build metadata.
-        if vec.len() > 1 {
-            vec.retain(|version| {
-                version.package_id().version().to_string() == id.version().to_string()
-            });
-        }
-        if vec.len() == 0 {
-            return Err(format!("could not find package: {}", id).into())
-        }
-        if vec.len() > 1 {
-            return Err(format!("found too many packages: {}", id).into())
-        }
-        try!(registry.download(id).chain_err(|| {
-            "failed to download package from registry"
-        }));
-
-        // Next up, copy it to the vendor directory
-        let name = format!("{}-{}", id.name(), id.version());
-        let src = src.join(&name).into_path_unlocked();
+    for (id, pkg) in ids.iter() {
+        // copy it to the vendor directory
+        let src = pkg.manifest_path().parent().expect("manifest_path should point to a file");
         let dir_has_version_suffix = explicit_version || id.version() != max[id.name()];
         let dst_name = if dir_has_version_suffix {
             // Eg vendor/futures-0.1.13
@@ -244,7 +208,7 @@ fn sync(workspaces: &[Workspace],
         }
 
         config.shell().status("Vendoring",
-                              &format!("{} to {}", id, dst.display()))?;
+                              &format!("{} ({}) to {}", id, src.to_string_lossy(), dst.display()))?;
 
         let _ = fs::remove_dir_all(&dst);
         let mut map = BTreeMap::new();
@@ -252,12 +216,8 @@ fn sync(workspaces: &[Workspace],
             format!("failed to copy over vendored sources for: {}", id)
         }));
 
-        // Finally, emit the metadata about this package
-        let crate_file = format!("{}-{}.crate", id.name(), id.version());
-        let crate_file = cache.join(&crate_file).into_path_unlocked();
-
         let json = json!({
-            "package": try!(sha256(&crate_file)),
+            "package": pkg.summary().checksum(),
             "files": map,
         });
 
@@ -272,7 +232,65 @@ fn sync(workspaces: &[Workspace],
         }
     }
 
-    Ok(())
+    // build the .cargo/config for using the vendored sources
+    let mut sources_config = BTreeMap::new();
+
+    // add our vendored source
+    let dir = config.cwd().join(local_dst).to_str().expect("vendor path must be utf8").to_string();
+    sources_config.insert("vendored-sources".to_string(),  toml::Value::Table(btreemap! {
+        "directory".to_string() => toml::Value::String(dir),
+    }));
+
+    // replace original sources with vendor
+    for source_id in sources.into_iter() {
+        let base_name = source_name(source_id);
+        let mut name = base_name.clone();
+
+        // append a number if required to make key unique
+        let mut suffix = 0;
+        while sources_config.contains_key(&name) {
+            name = format!("{}-{}", base_name, suffix);
+            suffix += 1;
+        }
+
+        let kind = if source_id.is_registry() {
+            "registry"
+        } else if source_id.is_git() {
+            "git"
+        } else if source_id.is_path() {
+            "directory"
+        } else {
+            panic!("unhandled source kind: {}", source_id);
+        };
+
+        let mut source_config = btreemap! {
+            kind.to_string() => toml::Value::String(source_id.url().to_string()),
+            "replace-with".to_string() => toml::Value::String("vendored-sources".to_string()),
+        };
+
+        if let Some(reference) = source_id.git_reference() {
+            let (key, value) = match *reference {
+                GitReference::Branch(ref branch) => ("branch", branch),
+                GitReference::Tag(ref tag) => ("tag", tag),
+                GitReference::Rev(ref rev) => ("rev", rev),
+            };
+            source_config.insert(key.to_string(), toml::Value::String(value.to_string()));
+        }
+
+        sources_config.insert(name, toml::Value::Table(source_config));
+    }
+
+    Ok(toml::to_string(&toml::Value::Table(btreemap! {
+        "source".to_string() => toml::Value::Table(sources_config)
+    })).unwrap())
+}
+
+fn source_name(id: &SourceId) -> String {
+    let ident = id.url().path_segments().and_then(|iter| {
+        iter.rev().skip_while(|s| s.is_empty()).next()
+    }).unwrap_or("_empty");
+
+    format!("{}-{}", ident, cargo::util::short_hash(id.url()))
 }
 
 fn cp_r(src: &Path,
@@ -290,15 +308,7 @@ fn cp_r(src: &Path,
             // into someone else's source control
             Some(".gitattributes") => continue,
             Some(".gitignore") => continue,
-
-            // Skip patch-style orig/rej files. Published crates on crates.io
-            // have `Cargo.toml.orig` which we don't want to use here and
-            // otherwise these are rarely used as part of the build process.
-            Some(filename) => {
-                if filename.ends_with(".orig") || filename.ends_with(".rej") {
-                    continue;
-                }
-            }
+            Some(".git") => continue,
             _ => ()
         }
 
