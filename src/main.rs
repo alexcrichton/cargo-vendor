@@ -282,12 +282,17 @@ fn cp_r(src: &Path,
     for entry in try!(src.read_dir()) {
         let entry = try!(entry);
 
-        // Skip git config files as they're not relevant to builds most of the
-        // time and if we respect them (e.g. in git) then it'll probably mess
-        // with the checksums.
+        // Skip git config files and SCM backup/reject files as they're not
+        // relevant to builds most of the time and if we respect them (e.g. in
+        // git) then it'll probably mess with the checksums.
         match entry.file_name().to_str() {
             Some(".gitattribute") => continue,
             Some(".gitignore") => continue,
+            Some(filename) => {
+                if filename.ends_with(".orig") || filename.ends_with(".rej") {
+                    continue;
+                }
+            }
             _ => ()
         }
 

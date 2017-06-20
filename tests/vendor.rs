@@ -270,3 +270,22 @@ fn delete_old_crates() {
     assert!(lock.contains("version = \"0.3.5\""));
     assert!(!dir.join("vendor/bitflags/Cargo.toml").exists());
 }
+
+#[test]
+fn ignore_files() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        url = "=1.4.1"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let csum = read(&dir.join("vendor/url/.cargo-checksum.json"));
+    assert!(!csum.contains("\"Cargo.toml.orig\""));
+}
