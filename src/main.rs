@@ -287,7 +287,7 @@ fn cp_r(src: &Path,
             // the time and if we respect them (e.g.  in git) then it'll
             // probably mess with the checksums when a vendor dir is checked
             // into someone else's source control
-            Some(".gitattribute") => continue,
+            Some(".gitattributes") => continue,
             Some(".gitignore") => continue,
 
             // Skip patch-style orig/rej files. Published crates on crates.io
