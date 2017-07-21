@@ -1,6 +1,9 @@
 extern crate cargo;
 extern crate env_logger;
-extern crate rustc_serialize;
+extern crate hex;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
 #[macro_use]
 extern crate serde_json;
 
@@ -11,14 +14,14 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
 
-use rustc_serialize::hex::ToHex;
+use hex::ToHex;
 
 use cargo::core::{SourceId, Dependency, Workspace};
 use cargo::CliResult;
 use cargo::util::{human, ChainError, ToUrl, Config, CargoResult};
 use cargo::util::Sha256;
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 struct Options {
     arg_path: Option<String>,
     flag_no_delete: Option<bool>,
