@@ -15,7 +15,7 @@ use rustc_serialize::hex::ToHex;
 
 use cargo::core::{SourceId, Dependency, Workspace};
 use cargo::CliResult;
-use cargo::util::{human, ChainError, ToUrl, Config, CargoResult};
+use cargo::util::{ToUrl, Config, CargoResult, CargoResultExt};
 use cargo::util::Sha256;
 
 #[derive(RustcDecodable)]
@@ -101,11 +101,11 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
 
-    try!(fs::create_dir_all(&path).chain_error(|| {
-        human(format!("failed to create: `{}`", path.display()))
+    try!(fs::create_dir_all(&path).chain_err(|| {
+        format!("failed to create: `{}`", path.display())
     }));
     let id = try!(options.flag_host.map(|s| {
-        s.to_url().map(|url| SourceId::for_registry(&url)).map_err(human)
+        s.to_url().map(|url| SourceId::for_registry(&url))
     }).unwrap_or_else(|| {
         SourceId::crates_io(config)
     }));
@@ -133,8 +133,8 @@ fn real_main(options: Options, config: &Config) -> CliResult {
               &id,
               config,
               options.flag_explicit_version.unwrap_or(false),
-              options.flag_no_delete.unwrap_or(false)).chain_error(|| {
-        human("failed to sync")
+              options.flag_no_delete.unwrap_or(false)).chain_err(|| {
+        "failed to sync"
     }));
 
     if !options.flag_quiet.unwrap_or(false) {
@@ -163,8 +163,8 @@ fn sync(workspaces: &[Workspace],
     let mut registry = registry_id.load(config);
 
     for ws in workspaces {
-        let (_, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_error(|| {
-            human("failed to load pkg lockfile")
+        let (_, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_err(|| {
+            "failed to load pkg lockfile"
         }));
         ids.extend(resolve.iter()
                      .filter(|id| id.source_id() == registry_id)
@@ -198,7 +198,7 @@ fn sync(workspaces: &[Workspace],
         let dep = try!(Dependency::parse_no_deprecated(id.name(),
                                                        Some(&vers[..]),
                                                        id.source_id()));
-        let mut vec = try!(registry.query(&dep));
+        let mut vec = try!(registry.query_vec(&dep));
 
         // Some versions have "build metadata" which is ignored by semver when
         // matching. That means that `vec` being returned may have more than one
@@ -213,13 +213,13 @@ fn sync(workspaces: &[Workspace],
             });
         }
         if vec.len() == 0 {
-            return Err(human(format!("could not find package: {}", id)))
+            return Err(format!("could not find package: {}", id).into())
         }
         if vec.len() > 1 {
-            return Err(human(format!("found too many packages: {}", id)))
+            return Err(format!("found too many packages: {}", id).into())
         }
-        try!(registry.download(id).chain_error(|| {
-            human(format!("failed to download package from registry"))
+        try!(registry.download(id).chain_err(|| {
+            "failed to download package from registry"
         }));
 
         // Next up, copy it to the vendor directory
@@ -247,8 +247,8 @@ fn sync(workspaces: &[Workspace],
 
         let _ = fs::remove_dir_all(&dst);
         let mut map = BTreeMap::new();
-        try!(cp_r(&src, &dst, &dst, &mut map).chain_error(|| {
-            human(format!("failed to copy over vendored sources for: {}", id))
+        try!(cp_r(&src, &dst, &dst, &mut map).chain_err(|| {
+            format!("failed to copy over vendored sources for: {}", id)
         }));
 
         // Finally, emit the metadata about this package
