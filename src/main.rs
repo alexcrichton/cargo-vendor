@@ -171,8 +171,9 @@ fn sync(workspaces: &[Workspace],
                      .cloned());
     }
 
+    // https://github.com/rust-lang/cargo/blob/373c5d8ce43691f90929a74b047d7eababd04379/src/cargo/sources/registry/mod.rs#L248
     let hash = cargo::util::hex::short_hash(registry_id);
-    let ident = registry_id.url().host().unwrap().to_string();
+    let ident = registry_id.url().host_str().unwrap_or("").to_string();
     let part = format!("{}-{}", ident, hash);
 
     let src = config.registry_source_path().join(&part);
