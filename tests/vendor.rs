@@ -289,3 +289,47 @@ fn ignore_files() {
     let csum = read(&dir.join("vendor/url/.cargo-checksum.json"));
     assert!(!csum.contains("\"Cargo.toml.orig\""));
 }
+
+#[test]
+fn git_simple() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies.futures]
+        git = 'https://github.com/alexcrichton/futures-rs'
+        rev = '03a0005cb6498e4330'
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let csum = read(&dir.join("vendor/futures/.cargo-checksum.json"));
+    assert!(csum.contains("\"package\":null"));
+}
+
+#[test]
+fn git_duplicate() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        futures = "=0.1.15"
+
+        [dependencies.futures-cpupool]
+        git = 'https://github.com/alexcrichton/futures-rs'
+        rev = '03a0005cb6498e4330'
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    let output = vendor(&dir).output().unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("found duplicate version of package `futures v0.1.15`"));
+}
