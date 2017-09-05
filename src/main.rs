@@ -1,6 +1,7 @@
 extern crate cargo;
 extern crate env_logger;
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate toml;
@@ -14,14 +15,12 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
 
-use rustc_serialize::hex::ToHex;
-
-use cargo::core::{SourceId, Workspace, Package, GitReference};
+use cargo::core::{SourceId, Dependency, Workspace};
 use cargo::CliResult;
 use cargo::util::{human, ChainError, Config, CargoResult};
 use cargo::util::Sha256;
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 struct Options {
     arg_path: Option<String>,
     flag_no_delete: Option<bool>,
@@ -336,5 +335,23 @@ fn sha256(p: &Path) -> io::Result<String> {
         }
         sha.update(&buf[..n]);
     }
-    Ok(sha.finish().to_hex())
+    Ok(hex(&sha.finish()))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        s.push(hex((byte >> 4) & 0xf));
+        s.push(hex((byte >> 0) & 0xf));
+    }
+
+    return s;
+
+    fn hex(b: u8) -> char {
+        if b < 10 {
+            (b'0' + b) as char
+        } else {
+            (b'a' + b - 10) as char
+        }
+    }
 }
