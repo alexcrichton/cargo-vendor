@@ -5,19 +5,16 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate toml;
-#[macro_use]
-extern crate maplit;
 
-use std::cmp;
-use std::collections::{BTreeMap, HashMap, HashSet, BTreeSet};
+use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::path::Path;
+use std::path::{PathBuf, Path};
 
-use cargo::core::{SourceId, Dependency, Workspace};
+use cargo::core::{Workspace, GitReference};
 use cargo::CliResult;
-use cargo::util::{human, ChainError, Config, CargoResult};
+use cargo::util::{Config, CargoResult, CargoResultExt};
 use cargo::util::Sha256;
 
 #[derive(Deserialize)]
@@ -26,13 +23,38 @@ struct Options {
     flag_no_delete: Option<bool>,
     flag_version: bool,
     flag_sync: Option<Vec<String>>,
-    flag_host: Option<String>,
     flag_verbose: u32,
     flag_quiet: Option<bool>,
     flag_explicit_version: Option<bool>,
     flag_color: Option<String>,
     flag_frozen: bool,
     flag_locked: bool,
+}
+
+#[derive(Serialize)]
+struct VendorConfig {
+    source: BTreeMap<String, VendorSource>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase", untagged)]
+enum VendorSource {
+    Directory {
+        directory: PathBuf,
+    },
+    Registry {
+        registry: Option<String>,
+        #[serde(rename = "replace-with")]
+        replace_with: String,
+    },
+    Git {
+        git: String,
+        branch: Option<String>,
+        tag: Option<String>,
+        rev: Option<String>,
+        #[serde(rename = "replace-with")]
+        replace_with: String,
+    },
 }
 
 fn main() {
@@ -62,7 +84,6 @@ Options:
     -h, --help               Print this message
     -V, --version            Print version information
     -s, --sync TOML ...      Sync the `Cargo.toml` or `Cargo.lock` specified
-    --host HOST              Registry index to sync with
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
@@ -125,18 +146,22 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         }
     };
 
-    let cargo_config = try!(sync(&workspaces,
-              &path,
-              config,
-              options.flag_explicit_version.unwrap_or(false),
-              options.flag_no_delete.unwrap_or(false)).chain_err(|| {
+    let vendor_config = try!(sync(
+        &workspaces,
+        &path,
+        config,
+        options.flag_explicit_version.unwrap_or(false),
+        options.flag_no_delete.unwrap_or(false)
+    ).chain_err(|| {
         "failed to sync"
     }));
 
     if !options.flag_quiet.unwrap_or(false) {
         println!("To use vendored sources, add this to your .cargo/config for this project:
 
-{}", indent_string(4, &cargo_config));
+{}
+
+", indent_string(4, &toml::to_string(&vendor_config).unwrap()));
     }
 
     Ok(())
@@ -150,32 +175,42 @@ fn sync(workspaces: &[Workspace],
         local_dst: &Path,
         config: &Config,
         explicit_version: bool,
-        no_delete: bool) -> CargoResult<String> {
-    let skip = workspaces.iter().flat_map(Workspace::members).map(Package::package_id).collect::<HashSet<_>>();
-
+        no_delete: bool) -> CargoResult<VendorConfig> {
     let mut ids = BTreeMap::new();
     for ws in workspaces {
-        let (packages, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_error(|| {
-            human("failed to load pkg lockfile")
+        let (packages, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_err(|| {
+            "failed to load pkg lockfile"
         }));
-        for id in resolve.iter() {
-            if skip.contains(id) { continue }
 
-            let pkg = packages.get(id).chain_error(|| {
-                human(format!("failed to fetch package"))
-            })?;
-
-            ids.insert(id.clone(), pkg.clone());
+        for pkg in resolve.iter() {
+            if pkg.source_id().is_path() {
+                continue
+            }
+            ids.insert(pkg.clone(), packages.get(pkg).chain_err(|| {
+                "failed to fetch package"
+            })?.clone());
         }
     }
 
-    let mut max = HashMap::new();
-    let mut sources = BTreeSet::new();
-    for id in ids.keys() {
-        let max = max.entry(id.name()).or_insert(id.version());
-        *max = cmp::max(id.version(), *max);
+    // https://github.com/rust-lang/cargo/blob/373c5d8ce43691f90929a74b047d7eababd04379/src/cargo/sources/registry/mod.rs#L248
 
-        sources.insert(id.source_id());
+    let mut versions = HashMap::new();
+    for id in ids.keys() {
+        let map = versions.entry(id.name()).or_insert_with(BTreeMap::default);
+
+        if let Some(prev) = map.get(&id.version()) {
+            let err = format!("found duplicate version of package `{} v{}` \
+                               vendored from two sources:\n\
+                               \n\
+                               \tsource 1: {}\n\
+                               \tsource 2: {}",
+                              id.name(),
+                              id.version(),
+                              prev,
+                              id.source_id());
+            return Err(err.into())
+        }
+        map.insert(id.version(), id.source_id());
     }
 
     let existing_crates = local_dst.read_dir().map(|iter| {
@@ -186,10 +221,12 @@ fn sync(workspaces: &[Workspace],
     }).unwrap_or(Vec::new());
 
     let mut added_crates = Vec::new();
+    let mut sources = BTreeSet::new();
     for (id, pkg) in ids.iter() {
-        // copy it to the vendor directory
+        // Next up, copy it to the vendor directory
         let src = pkg.manifest_path().parent().expect("manifest_path should point to a file");
-        let dir_has_version_suffix = explicit_version || id.version() != max[id.name()];
+        let max_version = *versions[id.name()].iter().rev().next().unwrap().0;
+        let dir_has_version_suffix = explicit_version || id.version() != max_version;
         let dst_name = if dir_has_version_suffix {
             // Eg vendor/futures-0.1.13
             format!("{}-{}", id.name(), id.version())
@@ -199,6 +236,7 @@ fn sync(workspaces: &[Workspace],
         };
         let dst = local_dst.join(&dst_name);
         added_crates.push(dst.clone());
+        sources.insert(id.source_id());
 
         let cksum = dst.join(".cargo-checksum.json");
         if dir_has_version_suffix && cksum.exists() {
@@ -215,6 +253,7 @@ fn sync(workspaces: &[Workspace],
             format!("failed to copy over vendored sources for: {}", id)
         }));
 
+        // Finally, emit the metadata about this package
         let json = json!({
             "package": pkg.summary().checksum(),
             "files": map,
@@ -231,65 +270,51 @@ fn sync(workspaces: &[Workspace],
         }
     }
 
-    // build the .cargo/config for using the vendored sources
-    let mut sources_config = BTreeMap::new();
-
     // add our vendored source
-    let dir = config.cwd().join(local_dst).to_str().expect("vendor path must be utf8").to_string();
-    sources_config.insert("vendored-sources".to_string(),  toml::Value::Table(btreemap! {
-        "directory".to_string() => toml::Value::String(dir),
-    }));
+    let dir = config.cwd().join(local_dst);
+    let mut config = BTreeMap::new();
+    config.insert("vendored-sources".to_string(), VendorSource::Directory {
+        directory: dir.to_path_buf(),
+    });
 
     // replace original sources with vendor
-    for source_id in sources.into_iter() {
-        let base_name = source_name(source_id);
-        let mut name = base_name.clone();
-
-        // append a number if required to make key unique
-        let mut suffix = 0;
-        while sources_config.contains_key(&name) {
-            name = format!("{}-{}", base_name, suffix);
-            suffix += 1;
-        }
-
-        let kind = if source_id.is_registry() {
-            "registry"
-        } else if source_id.is_git() {
-            "git"
-        } else if source_id.is_path() {
-            "directory"
+    for source_id in sources {
+        let name = if source_id.is_default_registry() {
+            "crates-io".to_string()
         } else {
-            panic!("unhandled source kind: {}", source_id);
+            source_id.url().to_string()
         };
 
-        let mut source_config = btreemap! {
-            kind.to_string() => toml::Value::String(source_id.url().to_string()),
-            "replace-with".to_string() => toml::Value::String("vendored-sources".to_string()),
+        let source = if source_id.is_default_registry() {
+            VendorSource::Registry {
+                registry: None,
+                replace_with: "vendored-sources".to_string(),
+            }
+        } else if source_id.is_git() {
+            let mut branch = None;
+            let mut tag = None;
+            let mut rev = None;
+            if let Some(reference) = source_id.git_reference() {
+                match *reference {
+                    GitReference::Branch(ref b) => branch = Some(b.clone()),
+                    GitReference::Tag(ref t) => tag = Some(t.clone()),
+                    GitReference::Rev(ref r) => rev = Some(r.clone()),
+                }
+            }
+            VendorSource::Git {
+                git: source_id.url().to_string(),
+                branch,
+                tag,
+                rev,
+                replace_with: "vendored-sources".to_string(),
+            }
+        } else {
+            panic!()
         };
-
-        if let Some(reference) = source_id.git_reference() {
-            let (key, value) = match *reference {
-                GitReference::Branch(ref branch) => ("branch", branch),
-                GitReference::Tag(ref tag) => ("tag", tag),
-                GitReference::Rev(ref rev) => ("rev", rev),
-            };
-            source_config.insert(key.to_string(), toml::Value::String(value.to_string()));
-        }
-
-        sources_config.insert(name, toml::Value::Table(source_config));
+        config.insert(name, source);
     }
 
-    Ok(toml::to_string(&toml::Value::Table(btreemap! {
-        "source".to_string() => toml::Value::Table(sources_config)
-    })).unwrap())
-}
-
-fn source_name(id: &SourceId) -> String {
-    let ident = id.url().path_segments().and_then(|iter| {
-        iter.rev().skip_while(|s| s.is_empty()).next()
-    }).unwrap_or("_empty");
-
-    format!("{}-{}", ident, cargo::util::short_hash(id.url()))
+    Ok(VendorConfig { source: config })
 }
 
 fn cp_r(src: &Path,
@@ -305,9 +330,21 @@ fn cp_r(src: &Path,
             // the time and if we respect them (e.g.  in git) then it'll
             // probably mess with the checksums when a vendor dir is checked
             // into someone else's source control
-            Some(".gitattributes") => continue,
-            Some(".gitignore") => continue,
+            Some(".gitattributes") |
+            Some(".gitignore") |
             Some(".git") => continue,
+
+            // Temporary Cargo files
+            Some(".cargo-ok") => continue,
+
+            // Skip patch-style orig/rej files. Published crates on crates.io
+            // have `Cargo.toml.orig` which we don't want to use here and
+            // otherwise these are rarely used as part of the build process.
+            Some(filename) => {
+                if filename.ends_with(".orig") || filename.ends_with(".rej") {
+                    continue;
+                }
+            }
             _ => ()
         }
 
