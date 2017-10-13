@@ -20,12 +20,6 @@ You can also install [precompiled
 binaries](https://github.com/alexcrichton/cargo-vendor/releases) that are
 assembled on the CI for this crate.
 
-Note that the 0.1.9 release contains a number of ergonomic fixes over the 0.1.8
-release, but depends on the `cargo` crate from git so can't be published to
-crates.io just yet. The 0.1.10 version should be able to get published to
-crates.io on 2017-06-08. In the meantime it's recommended to install from git to
-get the latest version.
-
 ## Example Usage
 
 Simply run `cargo vendor` inside of any Cargo project:
