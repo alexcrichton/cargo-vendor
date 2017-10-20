@@ -29,7 +29,6 @@ $ cargo vendor
 add this to your .cargo/config for this project:
 
     [source.crates-io]
-    registry = 'https://github.com/rust-lang/crates.io-index'
     replace-with = 'vendored-sources'
 
     [source.vendored-sources]
