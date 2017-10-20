@@ -333,3 +333,36 @@ fn git_duplicate() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("found duplicate version of package `futures v0.1.15`"));
 }
+
+#[test]
+fn two_versions_disallowed() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.8.0"
+        bar = { path = "bar" }
+    "#);
+    file(&dir, "src/lib.rs", "");
+    file(&dir, "bar/Cargo.toml", r#"
+        [package]
+        name = "bar"
+        version = "0.1.0"
+
+        [dependencies]
+        bitflags = "=0.7.0"
+    "#);
+    file(&dir, "bar/src/lib.rs", "");
+
+    let output = vendor(&dir)
+        .arg("--disallow-duplicates")
+        .output()
+        .expect("failed to run cargo-vendor");
+    if output.status.success() {
+        panic!("expected a failure");
+    }
+}

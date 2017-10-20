@@ -29,6 +29,7 @@ struct Options {
     flag_color: Option<String>,
     flag_frozen: bool,
     flag_locked: bool,
+    flag_disallow_duplicates: bool,
 }
 
 #[derive(Serialize)]
@@ -87,6 +88,7 @@ Options:
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
+    --disallow-duplicates    Disallow two versions of one crate
     --no-delete              Don't delete older crates in the vendor directory
     --frozen                 Require Cargo.lock and cache are up to date
     --locked                 Require Cargo.lock is up to date
@@ -151,7 +153,8 @@ fn real_main(options: Options, config: &Config) -> CliResult {
         &path,
         config,
         options.flag_explicit_version.unwrap_or(false),
-        options.flag_no_delete.unwrap_or(false)
+        options.flag_no_delete.unwrap_or(false),
+        options.flag_disallow_duplicates,
     ).chain_err(|| {
         "failed to sync"
     }));
@@ -175,7 +178,8 @@ fn sync(workspaces: &[Workspace],
         local_dst: &Path,
         config: &Config,
         explicit_version: bool,
-        no_delete: bool) -> CargoResult<VendorConfig> {
+        no_delete: bool,
+        disallow_duplicates: bool) -> CargoResult<VendorConfig> {
     let mut ids = BTreeMap::new();
     for ws in workspaces {
         let (packages, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_err(|| {
@@ -228,6 +232,14 @@ fn sync(workspaces: &[Workspace],
         let max_version = *versions[id.name()].iter().rev().next().unwrap().0;
         let dir_has_version_suffix = explicit_version || id.version() != max_version;
         let dst_name = if dir_has_version_suffix {
+            if !explicit_version && disallow_duplicates {
+                return Err(format!("found duplicate versions of package `{}` \
+                                    at {} and {}, but this was disallowed via \
+                                    --disallow-duplicates",
+                                   pkg.name(),
+                                   id.version(),
+                                   max_version).into())
+            }
             // Eg vendor/futures-0.1.13
             format!("{}-{}", id.name(), id.version())
         } else {
