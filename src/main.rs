@@ -121,7 +121,8 @@ fn real_main(options: Options, config: &Config) -> CliResult {
                           options.flag_quiet,
                           &options.flag_color,
                           options.flag_frozen,
-                          options.flag_locked));
+                          options.flag_locked,
+                          &[]));
 
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
