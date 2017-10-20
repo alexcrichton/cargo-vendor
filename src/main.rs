@@ -160,18 +160,11 @@ fn real_main(options: Options, config: &Config) -> CliResult {
     }));
 
     if !options.flag_quiet.unwrap_or(false) {
-        println!("To use vendored sources, add this to your .cargo/config for this project:
-
-{}
-
-", indent_string(4, &toml::to_string(&vendor_config).unwrap()));
+        eprint!("To use vendored sources, add this to your .cargo/config for this project:\n\n");
+        print!("{}", &toml::to_string(&vendor_config).unwrap());
     }
 
     Ok(())
-}
-
-fn indent_string(amount: usize, data: &str) -> String {
-    data.lines().map(|l| " ".repeat(amount) + l + "\n").collect()
 }
 
 fn sync(workspaces: &[Workspace],
