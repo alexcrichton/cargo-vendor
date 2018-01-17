@@ -59,13 +59,13 @@ enum VendorSource {
 }
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     // We're doing the vendoring operation outselves, so we don't actually want
     // to respect any of the `source` configuration in Cargo itself. That's
     // intended for other consumers of Cargo, but we want to go straight to the
     // source, e.g. crates.io, to fetch crates.
-    let config = {
+    let mut config = {
         let config_orig = Config::default().unwrap();
         let mut values = config_orig.values().unwrap().clone();
         values.remove("source");
@@ -75,7 +75,7 @@ fn main() {
     };
 
     let args = env::args().collect::<Vec<_>>();
-    let result = cargo::call_main_without_stdin(real_main, &config, r#"
+    let result = cargo::call_main_without_stdin(real_main, &mut config, r#"
 Vendor all dependencies for a project locally
 
 Usage:
@@ -111,7 +111,7 @@ to use the vendored sources, which when needed is then encoded into
     }
 }
 
-fn real_main(options: Options, config: &Config) -> CliResult {
+fn real_main(options: Options, config: &mut Config) -> CliResult {
     if options.flag_version {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return Ok(());
