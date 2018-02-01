@@ -39,6 +39,15 @@ This will populate the `vendor` directory which contains the source of all
 crates.io dependencies. When configured, Cargo will then use this directory
 instead of looking at crates.io.
 
+Also note that the output of `cargo vendor` that should be configuration is all
+on stdout (as opposed to stderr where other messages go), so you can also do:
+
+```
+$ cargo vendor > .cargo/config
+```
+
+to vendor and initialize your config in the same step!
+
 # License
 
 This project is licensed under either of
