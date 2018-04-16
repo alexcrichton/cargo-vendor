@@ -5,6 +5,8 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate toml;
+#[macro_use]
+extern crate failure;
 
 use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::env;
@@ -117,19 +119,19 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         return Ok(());
     }
 
-    try!(config.configure(options.flag_verbose,
-                          options.flag_quiet,
-                          &options.flag_color,
-                          options.flag_frozen,
-                          options.flag_locked,
-                          &[]));
+    config.configure(options.flag_verbose,
+                     options.flag_quiet,
+                     &options.flag_color,
+                     options.flag_frozen,
+                     options.flag_locked,
+                     &[])?;
 
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
 
-    try!(fs::create_dir_all(&path).chain_err(|| {
+    fs::create_dir_all(&path).chain_err(|| {
         format!("failed to create: `{}`", path.display())
-    }));
+    }).map_err(|e| cargo::CargoError::from(e))?;
 
     let workspaces = match options.flag_sync {
         Some(list) => {
@@ -149,7 +151,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         }
     };
 
-    let vendor_config = try!(sync(
+    let vendor_config = sync(
         &workspaces,
         &path,
         config,
@@ -157,8 +159,8 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_no_delete.unwrap_or(false),
         options.flag_disallow_duplicates,
     ).chain_err(|| {
-        "failed to sync"
-    }));
+        format!("failed to sync")
+    }).map_err(|e| cargo::CargoError::from(e))?;
 
     if !options.flag_quiet.unwrap_or(false) {
         eprint!("To use vendored sources, add this to your .cargo/config for this project:\n\n");
@@ -176,9 +178,9 @@ fn sync(workspaces: &[Workspace],
         disallow_duplicates: bool) -> CargoResult<VendorConfig> {
     let mut ids = BTreeMap::new();
     for ws in workspaces {
-        let (packages, resolve) = try!(cargo::ops::resolve_ws(&ws).chain_err(|| {
+        let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
             "failed to load pkg lockfile"
-        }));
+        })?;
 
         for pkg in resolve.iter() {
             if pkg.source_id().is_path() {
@@ -197,16 +199,15 @@ fn sync(workspaces: &[Workspace],
         let map = versions.entry(id.name()).or_insert_with(BTreeMap::default);
 
         if let Some(prev) = map.get(&id.version()) {
-            let err = format!("found duplicate version of package `{} v{}` \
-                               vendored from two sources:\n\
-                               \n\
-                               \tsource 1: {}\n\
-                               \tsource 2: {}",
-                              id.name(),
-                              id.version(),
-                              prev,
-                              id.source_id());
-            return Err(err.into())
+            bail!("found duplicate version of package `{} v{}` \
+                   vendored from two sources:\n\
+                   \n\
+                   \tsource 1: {}\n\
+                   \tsource 2: {}",
+                  id.name(),
+                  id.version(),
+                  prev,
+                  id.source_id())
         }
         map.insert(id.version(), id.source_id());
     }
@@ -227,12 +228,12 @@ fn sync(workspaces: &[Workspace],
         let dir_has_version_suffix = explicit_version || id.version() != max_version;
         let dst_name = if dir_has_version_suffix {
             if !explicit_version && disallow_duplicates {
-                return Err(format!("found duplicate versions of package `{}` \
-                                    at {} and {}, but this was disallowed via \
-                                    --disallow-duplicates",
-                                   pkg.name(),
-                                   id.version(),
-                                   max_version).into())
+                bail!("found duplicate versions of package `{}` \
+                        at {} and {}, but this was disallowed via \
+                        --disallow-duplicates",
+                       pkg.name(),
+                       id.version(),
+                       max_version)
             }
             // Eg vendor/futures-0.1.13
             format!("{}-{}", id.name(), id.version())
@@ -255,9 +256,9 @@ fn sync(workspaces: &[Workspace],
 
         let _ = fs::remove_dir_all(&dst);
         let mut map = BTreeMap::new();
-        try!(cp_r(&src, &dst, &dst, &mut map).chain_err(|| {
+        cp_r(&src, &dst, &dst, &mut map).chain_err(|| {
             format!("failed to copy over vendored sources for: {}", id)
-        }));
+        })?;
 
         // Finally, emit the metadata about this package
         let json = json!({
@@ -265,13 +266,13 @@ fn sync(workspaces: &[Workspace],
             "files": map,
         });
 
-        try!(try!(File::create(&cksum)).write_all(json.to_string().as_bytes()));
+        File::create(&cksum)?.write_all(json.to_string().as_bytes())?;
     }
 
     if !no_delete {
         for path in existing_crates {
             if !added_crates.contains(&path) {
-                try!(fs::remove_dir_all(&path));
+                fs::remove_dir_all(&path)?;
             }
         }
     }
@@ -327,9 +328,9 @@ fn cp_r(src: &Path,
         dst: &Path,
         root: &Path,
         cksums: &mut BTreeMap<String, String>) -> io::Result<()> {
-    try!(fs::create_dir(dst));
-    for entry in try!(src.read_dir()) {
-        let entry = try!(entry);
+    fs::create_dir(dst)?;
+    for entry in src.read_dir()? {
+        let entry = entry?;
 
         match entry.file_name().to_str() {
             // Skip git config files as they're not relevant to builds most of
@@ -356,23 +357,23 @@ fn cp_r(src: &Path,
 
         let src = entry.path();
         let dst = dst.join(entry.file_name());
-        if try!(entry.file_type()).is_dir() {
-            try!(cp_r(&src, &dst, root, cksums));
+        if entry.file_type()?.is_dir() {
+            cp_r(&src, &dst, root, cksums)?;
         } else {
-            try!(fs::copy(&src, &dst));
+            fs::copy(&src, &dst)?;
             let rel = dst.strip_prefix(root).unwrap().to_str().unwrap();
-            cksums.insert(rel.replace("\\", "/"), try!(sha256(&dst)));
+            cksums.insert(rel.replace("\\", "/"), sha256(&dst)?);
         }
     }
     Ok(())
 }
 
 fn sha256(p: &Path) -> io::Result<String> {
-    let mut file = try!(File::open(p));
+    let mut file = File::open(p)?;
     let mut sha = Sha256::new();
     let mut buf = [0; 2048];
     loop {
-        let n = try!(file.read(&mut buf));
+        let n = file.read(&mut buf)?;
         if n == 0 {
             break
         }
