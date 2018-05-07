@@ -176,6 +176,7 @@ fn sync(workspaces: &[Workspace],
         explicit_version: bool,
         no_delete: bool,
         disallow_duplicates: bool) -> CargoResult<VendorConfig> {
+    let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
     for ws in workspaces {
@@ -186,7 +187,7 @@ fn sync(workspaces: &[Workspace],
         for pkg in resolve.iter() {
             if pkg.source_id().is_path() {
                 let path = pkg.source_id().url().to_file_path().expect("path");
-                if path.starts_with(local_dst) {
+                if path.starts_with(canonical_local_dst.as_path()) {
                     added_crates.push(path);
                 }
                 continue
@@ -217,7 +218,7 @@ fn sync(workspaces: &[Workspace],
         map.insert(id.version(), id.source_id());
     }
 
-    let existing_crates = local_dst.read_dir().map(|iter| {
+    let existing_crates = canonical_local_dst.read_dir().map(|iter| {
         iter.filter_map(|e| e.ok())
             .filter(|e| e.path().join("Cargo.toml").exists())
             .map(|e| e.path())
@@ -245,7 +246,7 @@ fn sync(workspaces: &[Workspace],
             // Eg vendor/futures
             id.name().to_string()
         };
-        let dst = local_dst.join(&dst_name);
+        let dst = canonical_local_dst.join(&dst_name);
         added_crates.push(dst.clone());
         sources.insert(id.source_id());
 
@@ -282,10 +283,9 @@ fn sync(workspaces: &[Workspace],
     }
 
     // add our vendored source
-    let dir = config.cwd().join(local_dst);
     let mut config = BTreeMap::new();
     config.insert("vendored-sources".to_string(), VendorSource::Directory {
-        directory: dir.to_path_buf(),
+        directory: canonical_local_dst,
     });
 
     // replace original sources with vendor
