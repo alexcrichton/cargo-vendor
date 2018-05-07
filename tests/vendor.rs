@@ -52,9 +52,10 @@ fn read(path: &Path) -> String {
 fn run(cmd: &mut Command) -> (String, String) {
     println!("running {:?}", cmd);
     let output = cmd.output().unwrap();
+    println!("status: {}", output.status);
+    println!("stdout: ----------\n{}", String::from_utf8_lossy(&output.stdout));
+    println!("stderr: ----------\n{}", String::from_utf8_lossy(&output.stderr));
     if !output.status.success() {
-        println!("stdout: ----------\n{}", String::from_utf8_lossy(&output.stdout));
-        println!("stderr: ----------\n{}", String::from_utf8_lossy(&output.stderr));
         panic!("not successful: {}", output.status);
     }
 
@@ -365,4 +366,36 @@ fn two_versions_disallowed() {
     if output.status.success() {
         panic!("expected a failure");
     }
+}
+
+#[test]
+fn depend_on_vendor_dir_not_deleted() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        libc = "=0.2.30"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        libc = "=0.2.30"
+
+        [patch.crates-io]
+        libc = { path = 'vendor/libc' }
+    "#);
+
+    run(&mut vendor(&dir));
+    assert!(dir.join("vendor/libc").is_dir());
 }
