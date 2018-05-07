@@ -177,6 +177,7 @@ fn sync(workspaces: &[Workspace],
         no_delete: bool,
         disallow_duplicates: bool) -> CargoResult<VendorConfig> {
     let mut ids = BTreeMap::new();
+    let mut added_crates = Vec::new();
     for ws in workspaces {
         let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
             "failed to load pkg lockfile"
@@ -184,6 +185,10 @@ fn sync(workspaces: &[Workspace],
 
         for pkg in resolve.iter() {
             if pkg.source_id().is_path() {
+                let path = pkg.source_id().url().to_file_path().expect("path");
+                if path.starts_with(local_dst) {
+                    added_crates.push(path);
+                }
                 continue
             }
             ids.insert(pkg.clone(), packages.get(pkg).chain_err(|| {
@@ -219,7 +224,6 @@ fn sync(workspaces: &[Workspace],
             .collect::<Vec<_>>()
     }).unwrap_or(Vec::new());
 
-    let mut added_crates = Vec::new();
     let mut sources = BTreeSet::new();
     for (id, pkg) in ids.iter() {
         // Next up, copy it to the vendor directory
