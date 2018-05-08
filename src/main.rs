@@ -187,8 +187,9 @@ fn sync(workspaces: &[Workspace],
         for pkg in resolve.iter() {
             if pkg.source_id().is_path() {
                 let path = pkg.source_id().url().to_file_path().expect("path");
-                if path.starts_with(canonical_local_dst.as_path()) {
-                    added_crates.push(path);
+                let canonical_path = path.canonicalize().unwrap_or(path.to_path_buf());
+                if canonical_path.starts_with(canonical_local_dst.as_path()) {
+                    added_crates.push(canonical_path);
                 }
                 continue
             }
