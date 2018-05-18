@@ -7,9 +7,9 @@ extern crate serde_json;
 extern crate toml;
 #[macro_use]
 extern crate failure;
+extern crate docopt;
 
 use std::collections::{BTreeMap, HashMap, BTreeSet};
-use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{PathBuf, Path};
@@ -18,6 +18,7 @@ use cargo::core::{Workspace, GitReference};
 use cargo::CliResult;
 use cargo::util::{Config, CargoResult, CargoResultExt};
 use cargo::util::Sha256;
+use docopt::Docopt;
 
 #[derive(Deserialize)]
 struct Options {
@@ -76,8 +77,7 @@ fn main() {
         config
     };
 
-    let args = env::args().collect::<Vec<_>>();
-    let result = cargo::call_main_without_stdin(real_main, &mut config, r#"
+    let usage = r#"
 Vendor all dependencies for a project locally
 
 Usage:
@@ -106,8 +106,12 @@ necessary to build the manifests specified.
 The `cargo vendor` command will also print out the configuration necessary
 to use the vendored sources, which when needed is then encoded into
 `.cargo/config`.
-"#, &args, false);
+"#;
 
+    let options = Docopt::new(usage)
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+    let result = real_main(options, &mut config);
     if let Err(e) = result {
         cargo::exit_with_error(e, &mut *config.shell());
     }
@@ -230,7 +234,7 @@ fn sync(workspaces: &[Workspace],
     for (id, pkg) in ids.iter() {
         // Next up, copy it to the vendor directory
         let src = pkg.manifest_path().parent().expect("manifest_path should point to a file");
-        let max_version = *versions[id.name()].iter().rev().next().unwrap().0;
+        let max_version = *versions[&id.name()].iter().rev().next().unwrap().0;
         let dir_has_version_suffix = explicit_version || id.version() != max_version;
         let dst_name = if dir_has_version_suffix {
             if !explicit_version && disallow_duplicates {
