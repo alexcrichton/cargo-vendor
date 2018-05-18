@@ -13,7 +13,7 @@ replacement](http://doc.crates.io/source-replacement.html).
 Currently this can be installed with:
 
 ```
-$ cargo install --git https://github.com/alexcrichton/cargo-vendor
+$ cargo install cargo-vendor
 ```
 
 You can also install [precompiled
