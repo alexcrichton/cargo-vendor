@@ -33,6 +33,7 @@ struct Options {
     flag_frozen: bool,
     flag_locked: bool,
     flag_disallow_duplicates: bool,
+    flag_only_git_deps: bool,
 }
 
 #[derive(Serialize)]
@@ -92,6 +93,7 @@ Options:
     -x, --explicit-version   Always include version in subdir name
     --disallow-duplicates    Disallow two versions of one crate
     --no-delete              Don't delete older crates in the vendor directory
+    --only-git-deps          Only vendor git dependencies, not crates.io dependencies
     --frozen                 Require Cargo.lock and cache are up to date
     --locked                 Require Cargo.lock is up to date
     --color WHEN             Coloring: auto, always, never
@@ -162,6 +164,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_explicit_version.unwrap_or(false),
         options.flag_no_delete.unwrap_or(false),
         options.flag_disallow_duplicates,
+        options.flag_only_git_deps,
     ).chain_err(|| {
         format!("failed to sync")
     }).map_err(|e| cargo::CargoError::from(e))?;
@@ -179,7 +182,8 @@ fn sync(workspaces: &[Workspace],
         config: &Config,
         explicit_version: bool,
         no_delete: bool,
-        disallow_duplicates: bool) -> CargoResult<VendorConfig> {
+        disallow_duplicates: bool,
+        only_git_deps: bool) -> CargoResult<VendorConfig> {
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
@@ -251,6 +255,13 @@ fn sync(workspaces: &[Workspace],
             // Eg vendor/futures
             id.name().to_string()
         };
+
+
+        if !id.source_id().is_git() && only_git_deps {
+            // Skip out if we only want to process git dependencies
+            continue;
+        }
+
         let dst = canonical_local_dst.join(&dst_name);
         added_crates.push(dst.clone());
         sources.insert(id.source_id());
