@@ -288,10 +288,9 @@ fn sync(workspaces: &[Workspace],
     }
 
     // add our vendored source
-    let dir = config.cwd().join(local_dst);
     let mut config = BTreeMap::new();
     config.insert("vendored-sources".to_string(), VendorSource::Directory {
-        directory: dir.to_path_buf(),
+        directory: local_dst.to_path_buf(),
     });
 
     // replace original sources with vendor
