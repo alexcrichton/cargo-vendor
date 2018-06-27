@@ -86,7 +86,7 @@ Usage:
 Options:
     -h, --help               Print this message
     -V, --version            Print version information
-    -s, --sync TOML ...      Sync the `Cargo.toml` or `Cargo.lock` specified
+    -s, --sync TOML ...      Sync one or more `Cargo.toml` or `Cargo.lock`
     -v, --verbose ...        Use verbose output
     -q, --quiet              No output printed to stdout
     -x, --explicit-version   Always include version in subdir name
@@ -99,9 +99,9 @@ Options:
 This cargo subcommand will vendor all crates.io dependencies for a project into
 the specified directory at `<path>`. The `cargo vendor` command is intended to
 be run in the same directory as `Cargo.toml`, but the manifest can also be
-specified via the `--sync` flag. After this command completes the vendor
-directory specified by `<path>` will contain all sources from crates.io
-necessary to build the manifests specified.
+specified via one or more instances of the `--sync` flag. After this command
+completes the vendor directory specified by `<path>` will contain all sources
+from crates.io necessary to build the manifests specified.
 
 The `cargo vendor` command will also print out the configuration necessary
 to use the vendored sources, which when needed is then encoded into
