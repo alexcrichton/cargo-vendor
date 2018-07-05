@@ -128,6 +128,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
                      &options.flag_color,
                      options.flag_frozen,
                      options.flag_locked,
+                     &None, // target_dir,
                      &[])?;
 
     let default = "vendor".to_string();
