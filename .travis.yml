@@ -16,16 +16,19 @@ matrix:
           make install)
         - export OPENSSL_DIR=$HOME/openssl-musl
       script: cargo build --release --target $TARGET --locked
+      addons:
+        apt:
+          packages:
+          - musl-tools
 
     - os: osx
     - os: osx
       env: MACOSX_DEPLOYMENT_TARGET=10.7 DEPLOY=1 TARGET=x86_64-apple-darwin OPENSSL_STATIC=1
       script: cargo build --release --target $TARGET --locked
 
-addons:
-  apt:
-    packages:
-    - musl-tools
+branches:
+  only:
+  - master
 
 script:
   - cargo test --locked
