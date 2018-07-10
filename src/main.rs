@@ -33,6 +33,7 @@ struct Options {
     flag_frozen: bool,
     flag_locked: bool,
     flag_disallow_duplicates: bool,
+    flag_relative_path: bool,
 }
 
 #[derive(Serialize)]
@@ -95,6 +96,7 @@ Options:
     --frozen                 Require Cargo.lock and cache are up to date
     --locked                 Require Cargo.lock is up to date
     --color WHEN             Coloring: auto, always, never
+    --relative-path          Use relative vendor path for .cargo/config
 
 This cargo subcommand will vendor all crates.io dependencies for a project into
 the specified directory at `<path>`. The `cargo vendor` command is intended to
@@ -162,6 +164,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_explicit_version.unwrap_or(false),
         options.flag_no_delete.unwrap_or(false),
         options.flag_disallow_duplicates,
+        options.flag_relative_path,
     ).chain_err(|| {
         format!("failed to sync")
     }).map_err(|e| cargo::CargoError::from(e))?;
@@ -179,7 +182,8 @@ fn sync(workspaces: &[Workspace],
         config: &Config,
         explicit_version: bool,
         no_delete: bool,
-        disallow_duplicates: bool) -> CargoResult<VendorConfig> {
+        disallow_duplicates: bool,
+        use_relative_path: bool) -> CargoResult<VendorConfig> {
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
@@ -288,10 +292,15 @@ fn sync(workspaces: &[Workspace],
     }
 
     // add our vendored source
-    let mut config = BTreeMap::new();
-    config.insert("vendored-sources".to_string(), VendorSource::Directory {
-        directory: local_dst.to_path_buf(),
-    });
+    let dir = if use_relative_path {
+        local_dst.to_path_buf()
+    } else {
+        config.cwd().join(local_dst)
+    };
+    let mut config = BTreeMap::new(); 
+    config.insert("vendored-sources".to_string(), VendorSource::Directory { 
+        directory: dir, 
+    }); 
 
     // replace original sources with vendor
     for source_id in sources {
