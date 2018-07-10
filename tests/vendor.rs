@@ -336,6 +336,41 @@ fn git_duplicate() {
 }
 
 #[test]
+fn git_only() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependency]
+        log = "=0.3.5"
+
+        [dependencies.futures]
+        git = 'https://github.com/alexcrichton/futures-rs'
+        rev = '03a0005cb6498e4330'
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let output = vendor(&dir)
+        .arg("--only-git")
+        .output()
+        .expect("failed to run cargo-vendor");
+    if output.status.success() {
+        panic!("expected a failure");
+    }
+
+    assert!(dir.join("vendor/futures").is_dir());
+    assert!(!dir.join("vendor/log").exists());
+
+    let csum = read(&dir.join("vendor/futures/.cargo-checksum.json"));
+    assert!(csum.contains("\"package\":null"));
+
+}
+
+#[test]
 fn two_versions_disallowed() {
     let dir = dir();
 
