@@ -292,6 +292,26 @@ fn ignore_files() {
 }
 
 #[test]
+fn ignore_sys_subdir() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies.curl]
+        git = 'https://github.com/alexcrichton/curl-rust'
+        rev = '0eb2cbb158b4263aaad03c6ebc1468adf9248c6e'
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let csum = read(&dir.join("vendor/curl/.cargo-checksum.json"));
+    assert!(!csum.contains("curl-sys"));
+}
+
+#[test]
 fn git_simple() {
     let dir = dir();
 
