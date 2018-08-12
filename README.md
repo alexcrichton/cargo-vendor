@@ -48,6 +48,26 @@ $ cargo vendor > .cargo/config
 
 to vendor and initialize your config in the same step!
 
+### Flag `--no-merge-sources`
+
+If the vendored Cargo project makes use of `[replace]` sections it can happen
+that the vendoring operation fails, e.g. with an error like this:
+
+```
+found duplicate version of package `libc v0.2.43` vendored from two sources:
+...
+```
+
+The flag `--no-merge-sources` should be able to solve that. Make sure to grab
+the `.cargo/config` file directly from standard output since the config gets more
+complicated and unpredictable.
+
+Example:
+
+```
+$ cargo vendor --no-merge-sources > .cargo/config
+```
+
 # License
 
 This project is licensed under either of

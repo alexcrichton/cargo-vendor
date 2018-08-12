@@ -10,11 +10,13 @@ extern crate failure;
 extern crate docopt;
 
 use std::collections::{BTreeMap, HashMap, BTreeSet};
+use std::collections::hash_map::DefaultHasher;
 use std::fs::{self, File};
+use std::hash::Hasher;
 use std::io::{self, Read, Write};
 use std::path::{PathBuf, Path};
 
-use cargo::core::{Workspace, GitReference};
+use cargo::core::{Workspace, GitReference, SourceId};
 use cargo::CliResult;
 use cargo::util::{Config, CargoResult, CargoResultExt};
 use cargo::util::Sha256;
@@ -35,6 +37,7 @@ struct Options {
     flag_disallow_duplicates: bool,
     flag_relative_path: bool,
     flag_only_git_deps: bool,
+    flag_no_merge_sources: bool,
 }
 
 #[derive(Serialize)]
@@ -62,6 +65,8 @@ enum VendorSource {
         replace_with: String,
     },
 }
+
+const SOURCES_FILE_NAME: &str = ".sources";
 
 fn main() {
     env_logger::init();
@@ -99,6 +104,7 @@ Options:
     --locked                 Require Cargo.lock is up to date
     --color WHEN             Coloring: auto, always, never
     --relative-path          Use relative vendor path for .cargo/config
+    --no-merge-sources       Keep sources separate
 
 This cargo subcommand will vendor all crates.io dependencies for a project into
 the specified directory at `<path>`. The `cargo vendor` command is intended to
@@ -138,9 +144,23 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
 
+    let sources_file = path.join(SOURCES_FILE_NAME);
+    let is_multi_sources = sources_file.exists();
+    if is_multi_sources && !options.flag_no_merge_sources
+        || !is_multi_sources && options.flag_no_merge_sources {
+            fs::remove_dir_all(path).ok();
+        }
+
     fs::create_dir_all(&path).chain_err(|| {
         format!("failed to create: `{}`", path.display())
     }).map_err(|e| cargo::CargoError::from(e))?;
+
+    if !is_multi_sources && options.flag_no_merge_sources {
+        let mut file = File::create(sources_file)
+            .map_err(|e| cargo::CargoError::from(e))?;
+        file.write_all(json!([]).to_string().as_bytes())
+            .map_err(|e| cargo::CargoError::from(e))?;
+    }
 
     let workspaces = match options.flag_sync {
         Some(list) => {
@@ -169,6 +189,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_disallow_duplicates,
         options.flag_relative_path,
         options.flag_only_git_deps,
+        !options.flag_no_merge_sources,
     ).chain_err(|| {
         format!("failed to sync")
     }).map_err(|e| cargo::CargoError::from(e))?;
@@ -188,7 +209,8 @@ fn sync(workspaces: &[Workspace],
         no_delete: bool,
         disallow_duplicates: bool,
         use_relative_path: bool,
-        only_git_deps: bool) -> CargoResult<VendorConfig> {
+        only_git_deps: bool,
+        merge_sources: bool) -> CargoResult<VendorConfig> {
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
@@ -218,26 +240,46 @@ fn sync(workspaces: &[Workspace],
     for id in ids.keys() {
         let map = versions.entry(id.name()).or_insert_with(BTreeMap::default);
 
-        if let Some(prev) = map.get(&id.version()) {
-            bail!("found duplicate version of package `{} v{}` \
-                   vendored from two sources:\n\
-                   \n\
-                   \tsource 1: {}\n\
-                   \tsource 2: {}",
-                  id.name(),
-                  id.version(),
-                  prev,
-                  id.source_id())
+        match map.get(&id.version()) {
+            Some(prev) if merge_sources =>
+                bail!("found duplicate version of package `{} v{}` \
+                       vendored from two sources:\n\
+                       \n\
+                       \tsource 1: {}\n\
+                       \tsource 2: {}",
+                      id.name(),
+                      id.version(),
+                      prev,
+                      id.source_id()),
+            _ => {},
         }
         map.insert(id.version(), id.source_id());
     }
 
-    let existing_crates = canonical_local_dst.read_dir().map(|iter| {
-        iter.filter_map(|e| e.ok())
-            .filter(|e| e.path().join("Cargo.toml").exists())
-            .map(|e| e.path())
-            .collect::<Vec<_>>()
-    }).unwrap_or(Vec::new());
+    let source_paths = if merge_sources {
+        let mut set = BTreeSet::new();
+        set.insert(canonical_local_dst.clone());
+        set
+    } else {
+        let sources_file = canonical_local_dst.join(SOURCES_FILE_NAME);
+        let file = File::open(&sources_file)?;
+        serde_json::from_reader::<_,BTreeSet<PathBuf>>(file)?
+            .into_iter()
+            .map(|p| canonical_local_dst.join(p))
+            .collect()
+    };
+
+    let existing_crates: Vec<PathBuf> = source_paths
+        .iter()
+        .flat_map(|path| path
+                  .read_dir()
+                  .map(|iter| iter
+                       .filter_map(|e| e.ok())
+                       .filter(|e| e.path().join("Cargo.toml").exists())
+                       .map(|e| e.path())
+                       .collect::<Vec<_>>())
+                  .unwrap_or(Vec::new()))
+        .collect();
 
     let mut sources = BTreeSet::new();
     for (id, pkg) in ids.iter() {
@@ -267,9 +309,18 @@ fn sync(workspaces: &[Workspace],
             continue;
         }
 
-        let dst = canonical_local_dst.join(&dst_name);
+        let source_dir = if merge_sources {
+            canonical_local_dst.clone()
+        } else {
+            canonical_local_dst.join(source_id_to_dir_name(id.source_id()))
+        };
+        if sources.insert(id.source_id()) && !merge_sources {
+            fs::create_dir_all(&source_dir).chain_err(|| {
+                format!("failed to create: `{}`", source_dir.display())
+            }).map_err(|e| cargo::CargoError::from(e))?;
+        }
+        let dst = source_dir.join(&dst_name);
         added_crates.push(dst.clone());
-        sources.insert(id.source_id());
 
         let cksum = dst.join(".cargo-checksum.json");
         if dir_has_version_suffix && cksum.exists() {
@@ -303,6 +354,31 @@ fn sync(workspaces: &[Workspace],
         }
     }
 
+    if !merge_sources {
+        let sources_file = canonical_local_dst.join(SOURCES_FILE_NAME);
+        let file = File::open(&sources_file)?;
+        let mut new_sources: BTreeSet<String> = sources
+            .iter()
+            .map(|src_id| source_id_to_dir_name(src_id))
+            .collect();
+        let old_sources: BTreeSet<String> = serde_json::from_reader::<_,BTreeSet<String>>(file)?
+            .difference(&new_sources)
+            .map(|e| e.clone())
+            .collect();
+        for dir_name in old_sources {
+            let path = canonical_local_dst.join(dir_name.clone());
+            if path.is_dir() {
+                if path.read_dir()?.next().is_none() {
+                    fs::remove_dir(path)?;
+                } else {
+                    new_sources.insert(dir_name.clone());
+                }
+            }
+        }
+        let file = File::create(sources_file)?;
+        serde_json::to_writer(file, &new_sources)?;
+    }
+
     // add our vendored source
     let dir = if use_relative_path {
         local_dst.to_path_buf()
@@ -310,9 +386,13 @@ fn sync(workspaces: &[Workspace],
         config.cwd().join(local_dst)
     };
     let mut config = BTreeMap::new();
-    config.insert("vendored-sources".to_string(), VendorSource::Directory {
-        directory: dir,
-    });
+
+    let merged_source_name = "vendored-sources";
+    if merge_sources {
+        config.insert(merged_source_name.to_string(), VendorSource::Directory {
+            directory: dir.clone(),
+        });
+    }
 
     // replace original sources with vendor
     for source_id in sources {
@@ -322,10 +402,24 @@ fn sync(workspaces: &[Workspace],
             source_id.url().to_string()
         };
 
+        let replace_name = if !merge_sources {
+            format!("vendor+{}", name)
+        } else {
+            merged_source_name.to_string()
+        };
+
+        if !merge_sources {
+            let src_id_string = source_id_to_dir_name(source_id);
+            let src_dir = dir.join(src_id_string.clone());
+            config.insert(replace_name.clone(), VendorSource::Directory {
+                directory: src_dir,
+            });
+        }
+
         let source = if source_id.is_default_registry() {
             VendorSource::Registry {
                 registry: None,
-                replace_with: "vendored-sources".to_string(),
+                replace_with: replace_name,
             }
         } else if source_id.is_git() {
             let mut branch = None;
@@ -343,7 +437,7 @@ fn sync(workspaces: &[Workspace],
                 branch,
                 tag,
                 rev,
-                replace_with: "vendored-sources".to_string(),
+                replace_with: replace_name,
             }
         } else {
             panic!()
@@ -396,6 +490,24 @@ fn cp_r(src: &Path,
         }
     }
     Ok(())
+}
+
+fn source_id_to_dir_name(src_id: &SourceId) -> String {
+    let src_type = if src_id.is_registry() {
+        "registry"
+    } else if src_id.is_git() {
+        "git"
+    } else {
+        panic!()
+    };
+    let mut hasher = DefaultHasher::new();
+    src_id.stable_hash(Path::new(""), &mut hasher);
+    let src_hash = hasher.finish();
+    let mut bytes = [0; 8];
+    for i in 0..7 {
+        bytes[i] = (src_hash >> i * 8) as u8
+    }
+    format!("{}-{}", src_type, hex(&bytes))
 }
 
 fn sha256(p: &Path) -> io::Result<String> {

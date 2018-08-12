@@ -86,13 +86,17 @@ fn vendor_simple() {
 }
 
 fn add_vendor_config(dir: &Path) {
-    file(&dir, ".cargo/config", r#"
+    add_specific_vendor_config(dir, r#"
         [source.crates-io]
         replace-with = 'vendor'
 
         [source.vendor]
         directory = 'vendor'
     "#);
+}
+
+fn add_specific_vendor_config(dir: &Path, config: &str) {
+    file(&dir, ".cargo/config", config);
 }
 
 fn assert_vendor_works(dir: &Path) {
@@ -196,7 +200,8 @@ fn two_lockfiles() {
     file(&dir, "bar/src/lib.rs", "");
 
     run(vendor(&dir).arg("-s").arg("foo/Cargo.toml")
-                    .arg("-s").arg("bar/Cargo.toml"));
+                    .arg("-s").arg("bar/Cargo.toml")
+                    );
 
     let lock = read(&dir.join("vendor/bitflags/Cargo.toml"));
     assert!(lock.contains("version = \"0.8.0\""));
@@ -356,6 +361,7 @@ fn git_only() {
     run(&mut vendor(&dir));
     let output = vendor(&dir)
         .arg("--only-git")
+
         .output()
         .expect("failed to run cargo-vendor");
     if output.status.success() {
@@ -396,6 +402,7 @@ fn two_versions_disallowed() {
 
     let output = vendor(&dir)
         .arg("--disallow-duplicates")
+
         .output()
         .expect("failed to run cargo-vendor");
     if output.status.success() {
@@ -433,4 +440,60 @@ fn depend_on_vendor_dir_not_deleted() {
 
     run(&mut vendor(&dir));
     assert!(dir.join("vendor/libc").is_dir());
+}
+
+#[test]
+fn replace_section() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        libc = "=0.2.43"
+
+        [replace."libc:0.2.43"]
+        git = "https://github.com/rust-lang/libc"
+        rev = "add1a320b4e1b454794a034e3f4218f877c393fc"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    let (output, _) = run(&mut vendor(&dir).arg("--no-merge-sources"));
+    add_specific_vendor_config(&dir, &output);
+    run(Command::new("cargo").arg("build").current_dir(&dir));
+}
+
+#[test]
+fn switch_merged_source() {
+    let dir = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        log = "=0.3.5"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    // Start with multi sources
+    let (output, _) = run(&mut vendor(&dir).arg("--no-merge-sources"));
+    add_specific_vendor_config(&dir, &output);
+    run(Command::new("cargo").arg("build").current_dir(&dir));
+    assert!(dir.join("vendor/.sources").exists());
+
+    // Switch to merged source
+    run(&mut vendor(&dir));
+    assert_vendor_works(&dir);
+    assert!(!dir.join("vendor/.sources").exists());
+
+    // Switch back to multi sources
+    let (output, _) = run(&mut vendor(&dir).arg("--no-merge-sources"));
+    add_specific_vendor_config(&dir, &output);
+    run(Command::new("cargo").arg("build").current_dir(&dir));
+    assert!(dir.join("vendor/.sources").exists());
+    assert!(!dir.join("vendor/log").is_dir());
 }
