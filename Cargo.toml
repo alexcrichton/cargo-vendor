@@ -15,7 +15,7 @@ filesystem.
 cargo = "0.29.0"
 docopt = "1.0.1"
 env_logger = "0.5.12"
-serde = "1.0.74"
+serde = "1.0.75"
 serde_derive = "1.0.74"
 serde_json = "1.0.26"
 toml = "0.4.6"
