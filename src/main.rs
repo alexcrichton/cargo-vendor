@@ -381,6 +381,9 @@ fn cp_r(src: &Path,
                 if filename.ends_with(".orig") || filename.ends_with(".rej") {
                     continue;
                 }
+                if filename.ends_with("-sys") && entry.metadata()?.is_dir() {
+                    continue;
+                }
             }
             _ => ()
         }
