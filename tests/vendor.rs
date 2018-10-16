@@ -1,9 +1,14 @@
+extern crate once_cell;
+
 use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::{Mutex, MutexGuard};
+
+use once_cell::sync::OnceCell;
 
 fn vendor(dir: &Path) -> Command {
     let mut me = env::current_exe().unwrap();
@@ -20,7 +25,8 @@ fn vendor(dir: &Path) -> Command {
 
 static CNT: AtomicUsize = ATOMIC_USIZE_INIT;
 
-fn dir() -> PathBuf {
+fn dir() -> (PathBuf, MutexGuard<'static, ()>) {
+    static S: OnceCell<Mutex<()>> = OnceCell::INIT;
     let i = CNT.fetch_add(1, Ordering::SeqCst);
     let mut dir = env::current_exe().unwrap();
     dir.pop();
@@ -33,7 +39,9 @@ fn dir() -> PathBuf {
     dir.push(&format!("test{}", i));
     drop(fs::remove_dir_all(&dir));
     fs::create_dir(&dir).unwrap();
-    return dir
+
+    let guard = S.get_or_init(|| Mutex::new(())).lock().unwrap();
+    (dir, guard)
 }
 
 fn file(dir: &Path, path: &str, contents: &str) {
@@ -65,7 +73,7 @@ fn run(cmd: &mut Command) -> (String, String) {
 
 #[test]
 fn vendor_simple() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -106,7 +114,7 @@ fn assert_vendor_works(dir: &Path) {
 
 #[test]
 fn two_versions() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -145,7 +153,7 @@ fn help() {
 
 #[test]
 fn update_versions() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -178,7 +186,7 @@ fn update_versions() {
 
 #[test]
 fn two_lockfiles() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "foo/Cargo.toml", r#"
         [package]
@@ -215,7 +223,7 @@ fn two_lockfiles() {
 
 #[test]
 fn revendor_with_config() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -247,7 +255,7 @@ fn revendor_with_config() {
 
 #[test]
 fn delete_old_crates() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -279,7 +287,7 @@ fn delete_old_crates() {
 
 #[test]
 fn ignore_files() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -298,7 +306,7 @@ fn ignore_files() {
 
 #[test]
 fn git_simple() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -318,7 +326,7 @@ fn git_simple() {
 
 #[test]
 fn git_duplicate() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -342,7 +350,7 @@ fn git_duplicate() {
 
 #[test]
 fn git_only() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -378,7 +386,7 @@ fn git_only() {
 
 #[test]
 fn two_versions_disallowed() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -412,7 +420,7 @@ fn two_versions_disallowed() {
 
 #[test]
 fn depend_on_vendor_dir_not_deleted() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -444,7 +452,7 @@ fn depend_on_vendor_dir_not_deleted() {
 
 #[test]
 fn replace_section() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]
@@ -467,7 +475,7 @@ fn replace_section() {
 
 #[test]
 fn switch_merged_source() {
-    let dir = dir();
+    let (dir, _lock) = dir();
 
     file(&dir, "Cargo.toml", r#"
         [package]

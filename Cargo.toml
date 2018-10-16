@@ -22,5 +22,8 @@ toml = "0.4.8"
 failure = "0.1.2"
 openssl = { version = '0.10.13', optional = true }
 
+[dev-dependencies]
+once_cell = "0.1"
+
 [features]
 vendored-openssl = ['openssl/vendored']
