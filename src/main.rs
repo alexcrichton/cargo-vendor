@@ -214,6 +214,34 @@ fn sync(workspaces: &[Workspace],
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
+
+    // First up attempt to work around rust-lang/cargo#5956. Apparently build
+    // artifacts sprout up in Cargo's global cache for whatever reason, although
+    // it's unsure what tool is causing these issues at this time. For now we
+    // apply a heavy-hammer approach which is to delete Cargo's unpacked version
+    // of each crate to start off with. After we do this we'll re-resolve and
+    // redownload again, which should trigger Cargo to re-extract all the
+    // crates.
+    //
+    // Note that errors are largely ignored here as this is a best-effort
+    // attempt. If anything fails here we basically just move on to the next
+    // crate to work with.
+    for ws in workspaces {
+        let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
+            "failed to load pkg lockfile"
+        })?;
+
+        for pkg in resolve.iter() {
+            // Don't delete actual source code!
+            if pkg.source_id().is_path() {
+                continue
+            }
+            if let Ok(pkg) = packages.get(pkg) {
+                drop(fs::remove_dir_all(pkg.manifest_path().parent().unwrap()));
+            }
+        }
+    }
+
     for ws in workspaces {
         let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
             "failed to load pkg lockfile"
