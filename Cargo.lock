@@ -122,7 +122,7 @@ name = "cargo-vendor"
 version = "0.1.17"
 dependencies = [
  "cargo 0.30.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "docopt 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "docopt 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "docopt"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1209,7 +1209,7 @@ dependencies = [
 "checksum crypto-hash 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "09de9ee0fc255ace04c7fa0763c9395a945c37c8292bb554f8d48361d1dcf1b4"
 "checksum curl 0.4.18 (registry+https://github.com/rust-lang/crates.io-index)" = "a9e5285b49b44401518c947d3b808d14d99a538a6c9ffb3ec0205c11f9fc4389"
 "checksum curl-sys 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)" = "08459503c415173da1ce6b41036a37b8bfdd86af46d45abb9964d4c61fe670ef"
-"checksum docopt 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d60c92df70dfaaabecc14b409fd79f55ba0f247780529db1d73bfa601e1d3ac0"
+"checksum docopt 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "db2906c2579b5b7207fc1e328796a9a8835dc44e22dbe8e460b1d636f9a7b225"
 "checksum env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)" = "15b0a4d2e39f8420210be8b27eeda28029729e2fd4291019455016c348240c38"
 "checksum failure 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "6dd377bcc1b1b7ce911967e3ec24fa19c3224394ec05b54aa7b083d498341ac7"
 "checksum failure_derive 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "64c2d913fe8ed3b6c6518eedf4538255b989945c14c2a7d5cbff62a5e2120596"
