@@ -365,8 +365,10 @@ fn sync(workspaces: &[Workspace],
                               &format!("{} ({}) to {}", id, src.to_string_lossy(), dst.display()))?;
 
         let _ = fs::remove_dir_all(&dst);
+        let pathsource = cargo::sources::path::PathSource::new(&src, id.source_id(), config);
+        let paths = pathsource.list_files(&pkg)?;
         let mut map = BTreeMap::new();
-        cp_r(&src, &dst, &dst, &mut map).chain_err(|| {
+        cp_sources(&src, &paths, &dst, &mut map).chain_err(|| {
             format!("failed to copy over vendored sources for: {}", id)
         })?;
 
@@ -481,15 +483,14 @@ fn sync(workspaces: &[Workspace],
     Ok(VendorConfig { source: config })
 }
 
-fn cp_r(src: &Path,
-        dst: &Path,
-        root: &Path,
-        cksums: &mut BTreeMap<String, String>) -> io::Result<()> {
-    fs::create_dir(dst)?;
-    for entry in src.read_dir()? {
-        let entry = entry?;
+fn cp_sources(src: &Path,
+              paths: &Vec<PathBuf>,
+              dst: &Path,
+              cksums: &mut BTreeMap<String, String>) -> CargoResult<()> {
+    for p in paths {
+        let relative = p.strip_prefix(&src).unwrap();
 
-        match entry.file_name().to_str() {
+        match relative.to_str() {
             // Skip git config files as they're not relevant to builds most of
             // the time and if we respect them (e.g.  in git) then it'll
             // probably mess with the checksums when a vendor dir is checked
@@ -510,17 +511,22 @@ fn cp_r(src: &Path,
                 }
             }
             _ => ()
-        }
+        };
 
-        let src = entry.path();
-        let dst = dst.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            cp_r(&src, &dst, root, cksums)?;
-        } else {
-            fs::copy(&src, &dst)?;
-            let rel = dst.strip_prefix(root).unwrap().to_str().unwrap();
-            cksums.insert(rel.replace("\\", "/"), sha256(&dst)?);
-        }
+        // Join pathname components individually to make sure that the joined
+        // path uses the correct directory separators everywhere, since
+        // `relative` may use Unix-style and `dst` may require Windows-style
+        // backslashes.
+        let dst = relative.iter().fold(dst.to_owned(), |acc, component| {
+            acc.join(&component)
+        });
+
+        fs::create_dir_all(dst.parent().unwrap())?;
+
+        fs::copy(&p, &dst).chain_err(|| {
+            format!("failed to copy `{}` to `{}`", p.display(), dst.display())
+        })?;
+        cksums.insert(relative.to_str().unwrap().replace("\\", "/"), sha256(&dst)?);
     }
     Ok(())
 }
