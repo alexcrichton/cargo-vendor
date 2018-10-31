@@ -16,7 +16,7 @@ use std::hash::Hasher;
 use std::io::{self, Read, Write};
 use std::path::{PathBuf, Path};
 
-use cargo::core::{Workspace, GitReference, SourceId};
+use cargo::core::{Workspace, GitReference, SourceId, enable_nightly_features};
 use cargo::CliResult;
 use cargo::util::{Config, CargoResult, CargoResultExt};
 use cargo::util::Sha256;
@@ -132,6 +132,8 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+
+    enable_nightly_features();
 
     config.configure(options.flag_verbose,
                      options.flag_quiet,
