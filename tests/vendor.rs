@@ -305,6 +305,50 @@ fn ignore_files() {
 }
 
 #[test]
+fn included_files_only() {
+    let (dir, _lock) = dir();
+    // Use a fixed commit so we know what files are excluded.
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies.libc]
+        git = "https://github.com/rust-lang/libc"
+        rev = "b95fa265332df919e53eb66de5e6bd37fcd94041"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let csum = read(&dir.join("vendor/libc/.cargo-checksum.json"));
+    assert!(!csum.contains("\"ci/README.md\""));
+    assert!(!csum.contains("\"ci/docker/aarch64-linux-android\""));
+}
+
+#[test]
+fn dependent_crates_in_crates() {
+    let (dir, _lock) = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies.winapi]
+        git = 'https://github.com/retep998/winapi-rs/'
+        rev = '3792048cb07f9b762f8f0913293027759ea78db2'
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir));
+    let csum = read(&dir.join("vendor/winapi/.cargo-checksum.json"));
+    assert!(!csum.contains("\"tests/\""));
+    assert!(!csum.contains("\"x86_64/lib/\""));
+    let csum = read(&dir.join("vendor/winapi-i686-pc-windows-gnu/.cargo-checksum.json"));
+    assert!(!csum.contains("\"def/\""));
+}
+
+#[test]
 fn git_simple() {
     let (dir, _lock) = dir();
 
