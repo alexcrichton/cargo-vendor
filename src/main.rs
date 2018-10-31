@@ -133,6 +133,9 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         return Ok(());
     }
 
+    // We're not too interested in gating users based on nightly features or
+    // not, so just assume they're all enabled in the version of Cargo we're
+    // using.
     enable_nightly_features();
 
     config.configure(options.flag_verbose,
