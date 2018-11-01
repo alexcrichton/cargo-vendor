@@ -241,6 +241,9 @@ fn sync(workspaces: &[Workspace],
             if pkg.source_id().is_path() {
                 continue
             }
+            if pkg.source_id().is_git() {
+                continue;
+            }
             if let Ok(pkg) = packages.get(pkg) {
                 drop(fs::remove_dir_all(pkg.manifest_path().parent().unwrap()));
             }

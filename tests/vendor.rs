@@ -349,6 +349,30 @@ fn dependent_crates_in_crates() {
 }
 
 #[test]
+fn vendoring_git_crates() {
+    let (dir, _lock) = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies.serde]
+        version = "=1.0.66"
+
+        [dependencies.serde_derive]
+        version = "=1.0.66"
+
+        [patch.crates-io]
+        serde_derive = { git = "https://github.com/servo/serde", branch = "deserialize_from_enums8" }
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    run(&mut vendor(&dir)
+        .env("CARGO_HOME", &dir.join("cargo_home")));
+}
+
+#[test]
 fn git_simple() {
     let (dir, _lock) = dir();
 
