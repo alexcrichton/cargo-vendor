@@ -12,7 +12,7 @@ filesystem.
 """
 
 [dependencies]
-cargo = "0.31.0"
+cargo = { git = 'https://github.com/rust-lang/cargo', branch = 'rust-1.31.0' }
 docopt = "1.0.2"
 env_logger = "0.6.0"
 serde = "1.0.80"
