@@ -236,6 +236,8 @@ fn sync(workspaces: &[Workspace],
             "failed to load pkg lockfile"
         })?;
 
+        packages.get_many(resolve.iter())?;
+
         for pkg in resolve.iter() {
             // Don't delete actual source code!
             if pkg.source_id().is_path() {
@@ -244,7 +246,7 @@ fn sync(workspaces: &[Workspace],
             if pkg.source_id().is_git() {
                 continue;
             }
-            if let Ok(pkg) = packages.get(pkg) {
+            if let Ok(pkg) = packages.get_one(pkg) {
                 drop(fs::remove_dir_all(pkg.manifest_path().parent().unwrap()));
             }
         }
@@ -255,6 +257,8 @@ fn sync(workspaces: &[Workspace],
             "failed to load pkg lockfile"
         })?;
 
+        packages.get_many(resolve.iter())?;
+
         for pkg in resolve.iter() {
             if pkg.source_id().is_path() {
                 let path = pkg.source_id().url().to_file_path().expect("path");
@@ -264,7 +268,7 @@ fn sync(workspaces: &[Workspace],
                 }
                 continue
             }
-            ids.insert(pkg.clone(), packages.get(pkg).chain_err(|| {
+            ids.insert(pkg.clone(), packages.get_one(pkg).chain_err(|| {
                 "failed to fetch package"
             })?.clone());
         }
