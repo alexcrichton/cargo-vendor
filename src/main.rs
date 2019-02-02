@@ -401,7 +401,7 @@ fn sync(workspaces: &[Workspace],
         let file = File::open(&sources_file)?;
         let mut new_sources: BTreeSet<String> = sources
             .iter()
-            .map(|src_id| source_id_to_dir_name(src_id))
+            .map(|src_id| source_id_to_dir_name(*src_id))
             .collect();
         let old_sources: BTreeSet<String> = serde_json::from_reader::<_,BTreeSet<String>>(file)?
             .difference(&new_sources)
@@ -538,7 +538,7 @@ fn cp_sources(src: &Path,
     Ok(())
 }
 
-fn source_id_to_dir_name(src_id: &SourceId) -> String {
+fn source_id_to_dir_name(src_id: SourceId) -> String {
     let src_type = if src_id.is_registry() {
         "registry"
     } else if src_id.is_git() {
