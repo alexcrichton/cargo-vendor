@@ -20,7 +20,7 @@ serde_derive = "1.0.88"
 serde_json = "1.0.38"
 toml = "0.4.10"
 failure = "0.1.5"
-openssl = { version = '0.10.16', optional = true }
+openssl = { version = '0.10.17', optional = true }
 
 [dev-dependencies]
 once_cell = "0.1"
