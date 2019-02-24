@@ -38,6 +38,7 @@ struct Options {
     flag_relative_path: bool,
     flag_only_git_deps: bool,
     flag_no_merge_sources: bool,
+    flag_vendor_main_crate: bool,
 }
 
 #[derive(Serialize)]
@@ -105,6 +106,8 @@ Options:
     --color WHEN             Coloring: auto, always, never
     --relative-path          Use relative vendor path for .cargo/config
     --no-merge-sources       Keep sources separate
+    --vendor-main-crate      Vendor the main crate as well (additionally to its
+                             dependencies)
 
 This cargo subcommand will vendor all crates.io dependencies for a project into
 the specified directory at `<path>`. The `cargo vendor` command is intended to
@@ -195,6 +198,7 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_relative_path,
         options.flag_only_git_deps,
         !options.flag_no_merge_sources,
+        options.flag_vendor_main_crate,
     ).chain_err(|| {
         format!("failed to sync")
     }).map_err(|e| cargo::CargoError::from(e))?;
@@ -215,7 +219,8 @@ fn sync(workspaces: &[Workspace],
         disallow_duplicates: bool,
         use_relative_path: bool,
         only_git_deps: bool,
-        merge_sources: bool) -> CargoResult<VendorConfig> {
+        merge_sources: bool,
+        vendor_main_crate: bool) -> CargoResult<VendorConfig> {
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
@@ -253,6 +258,7 @@ fn sync(workspaces: &[Workspace],
     }
 
     for ws in workspaces {
+        let main_pkg = ws.current().map(|x| x.name().as_str()).unwrap_or("");
         let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
             "failed to load pkg lockfile"
         })?;
@@ -263,10 +269,12 @@ fn sync(workspaces: &[Workspace],
             if pkg.source_id().is_path() {
                 let path = pkg.source_id().url().to_file_path().expect("path");
                 let canonical_path = path.canonicalize().unwrap_or(path.to_path_buf());
-                if canonical_path.starts_with(canonical_local_dst.as_path()) {
-                    added_crates.push(canonical_path);
+                if !(vendor_main_crate && main_pkg == pkg.name().as_str()) {
+                    if canonical_path.starts_with(canonical_local_dst.as_path()) {
+                        added_crates.push(canonical_path);
+                    }
+                    continue
                 }
-                continue
             }
             ids.insert(pkg.clone(), packages.get_one(pkg).chain_err(|| {
                 "failed to fetch package"
@@ -458,6 +466,11 @@ fn sync(workspaces: &[Workspace],
             });
         }
 
+        // if source id is a path and vendor_main_crate, skip the source replacement
+        if source_id.is_path() && vendor_main_crate {
+            continue;
+        }
+
         let source = if source_id.is_default_registry() {
             VendorSource::Registry {
                 registry: None,
@@ -482,7 +495,7 @@ fn sync(workspaces: &[Workspace],
                 replace_with: replace_name,
             }
         } else {
-            panic!()
+            panic!("Invalid source ID: {}", source_id)
         };
         config.insert(name, source);
     }
