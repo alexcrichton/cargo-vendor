@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use once_cell::sync::OnceCell;
@@ -23,7 +23,7 @@ fn vendor(dir: &Path) -> Command {
     return cmd
 }
 
-static CNT: AtomicUsize = ATOMIC_USIZE_INIT;
+static CNT: AtomicUsize = AtomicUsize::new(0);
 
 fn dir() -> (PathBuf, MutexGuard<'static, ()>) {
     static S: OnceCell<Mutex<()>> = OnceCell::INIT;
@@ -572,4 +572,52 @@ fn switch_merged_source() {
     run(Command::new("cargo").arg("build").current_dir(&dir));
     assert!(dir.join("vendor/.sources").exists());
     assert!(!dir.join("vendor/log").is_dir());
+}
+
+#[test]
+fn main_crate_vendored() {
+    let (dir, _lock) = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        log = "=0.3.5"
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    let (output, _) = run(&mut vendor(&dir).arg("--vendor-main-crate"));
+    assert!(dir.join("vendor/log").is_dir());
+    assert!(dir.join("vendor/foo").is_dir());
+}
+
+#[test]
+fn path_dependency_ignored_when_main_crate_vendored() {
+    let (dir, _lock) = dir();
+
+    file(&dir, "Cargo.toml", r#"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+
+        [dependencies]
+        log = "=0.3.5"
+        subcrate = { path = "subcrate" }
+    "#);
+    file(&dir, "src/lib.rs", "");
+
+    file(&dir, "subcrate/Cargo.toml", r#"[package]
+        name = "subcrate"
+        version = "0.1.0"
+
+        [dependencies]
+    "#);
+    file(&dir, "subcrate/src/lib.rs", "");
+
+    let (output, _) = run(&mut vendor(&dir).arg("--vendor-main-crate"));
+    assert!(dir.join("vendor/log").is_dir());
+    assert!(dir.join("vendor/foo").is_dir());
+    assert!(!dir.join("vendor/subcrate").is_dir());
 }
