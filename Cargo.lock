@@ -85,7 +85,7 @@ dependencies = [
  "crypto-hash 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "curl 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "curl-sys 0.4.16 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -131,7 +131,7 @@ version = "0.1.23"
 dependencies = [
  "cargo 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "docopt 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "openssl 0.10.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "atty 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1280,7 +1280,7 @@ dependencies = [
 "checksum curl 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)" = "c7c9d851c825e0c033979d4516c9173bc19a78a96eb4d6ae51d4045440eafa16"
 "checksum curl-sys 0.4.16 (registry+https://github.com/rust-lang/crates.io-index)" = "ca79238a79fb294be6173b4057c95b22a718c94c4e38475d5faa82b8383f3502"
 "checksum docopt 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "db2906c2579b5b7207fc1e328796a9a8835dc44e22dbe8e460b1d636f9a7b225"
-"checksum env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "afb070faf94c85d17d50ca44f6ad076bce18ae92f0037d350947240a36e9d42e"
+"checksum env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "b61fa891024a945da30a9581546e8cfaf5602c7b3f4c137a2805cf388f92075a"
 "checksum failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "795bd83d3abeb9220f257e597aa0080a508b27533824adf336529648f6abf7e2"
 "checksum failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "ea1063915fd7ef4309e222a5a07cf9c319fb9c7836b1f89b85458672dbb127e1"
 "checksum filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "a2df5c1a8c4be27e7707789dc42ae65976e60b394afd293d1419ab915833e646"
