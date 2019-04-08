@@ -68,6 +68,29 @@ Example:
 $ cargo vendor --no-merge-sources > .cargo/config
 ```
 
+### Curl built against the NSS SSL library
+
+If you saw this error message:
+
+```
+error: failed to sync
+...
+Caused by:
+  [77] Problem with the SSL CA cert (path? access rights?)
+```
+
+That means most likely, that cargo-vendor's curl was linked against
+`libcurl-nss.so` due to installed libcurl NSS development files, and that the
+required library `libnsspem.so` is missing. See also the curl man page: "If
+curl is built against the NSS SSL library, the NSS PEM PKCS#11 module
+(libnsspem.so) needs to be available for this option to work properly."
+
+In order to avoid this failure you can either
+
+ * install the missing library (e.g. Debian: `nss-plugin-pem`), or
+ * remove the libcurl NSS development files (e.g. Debian: `libcurl4-nss-dev`) and
+   rebuild cargo-vendor.
+
 # License
 
 This project is licensed under either of
