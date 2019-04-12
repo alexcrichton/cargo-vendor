@@ -246,6 +246,8 @@ fn sync(
         }
     }
 
+    let mut checksums = HashMap::new();
+
     for ws in workspaces {
         let main_pkg = ws.current().map(|x| x.name().as_str()).unwrap_or("");
         let (packages, resolve) =
@@ -271,6 +273,8 @@ fn sync(
                     .chain_err(|| "failed to fetch package")?
                     .clone(),
             );
+
+            checksums.insert(pkg.clone(), resolve.checksums().get(&pkg).cloned());
         }
     }
 
@@ -388,7 +392,7 @@ fn sync(
 
         // Finally, emit the metadata about this package
         let json = serde_json::json!({
-            "package": pkg.summary().checksum(),
+            "package": checksums.get(id),
             "files": map,
         });
 
