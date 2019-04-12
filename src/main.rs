@@ -1,26 +1,15 @@
-extern crate cargo;
-extern crate env_logger;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
-extern crate toml;
-#[macro_use]
-extern crate failure;
-extern crate docopt;
-
-use std::collections::{BTreeMap, HashMap, BTreeSet};
+use cargo::core::{enable_nightly_features, GitReference, SourceId, Workspace};
+use cargo::util::Sha256;
+use cargo::util::{CargoResult, CargoResultExt, Config};
+use docopt::Docopt;
+use failure::bail;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::{self, File};
 use std::hash::Hasher;
 use std::io::{self, Read, Write};
-use std::path::{PathBuf, Path};
-
-use cargo::core::{Workspace, GitReference, SourceId, enable_nightly_features};
-use cargo::CliResult;
-use cargo::util::{Config, CargoResult, CargoResultExt};
-use cargo::util::Sha256;
-use docopt::Docopt;
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize)]
 struct Options {
@@ -126,11 +115,11 @@ to use the vendored sources, which when needed is then encoded into
         .unwrap_or_else(|e| e.exit());
     let result = real_main(options, &mut config);
     if let Err(e) = result {
-        cargo::exit_with_error(e, &mut *config.shell());
+        cargo::exit_with_error(e.into(), &mut *config.shell());
     }
 }
 
-fn real_main(options: Options, config: &mut Config) -> CliResult {
+fn real_main(options: Options, config: &mut Config) -> CargoResult<()> {
     if options.flag_version {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return Ok(());
@@ -141,13 +130,15 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
     // using.
     enable_nightly_features();
 
-    config.configure(options.flag_verbose,
-                     options.flag_quiet,
-                     &options.flag_color,
-                     options.flag_frozen,
-                     options.flag_locked,
-                     &None, // target_dir,
-                     &[])?;
+    config.configure(
+        options.flag_verbose,
+        options.flag_quiet,
+        &options.flag_color,
+        options.flag_frozen,
+        options.flag_locked,
+        &None, // target_dir,
+        &[],
+    )?;
 
     let default = "vendor".to_string();
     let path = Path::new(options.arg_path.as_ref().unwrap_or(&default));
@@ -155,24 +146,22 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
     let sources_file = path.join(SOURCES_FILE_NAME);
     let is_multi_sources = sources_file.exists();
     if is_multi_sources && !options.flag_no_merge_sources
-        || !is_multi_sources && options.flag_no_merge_sources {
-            fs::remove_dir_all(path).ok();
-        }
+        || !is_multi_sources && options.flag_no_merge_sources
+    {
+        fs::remove_dir_all(path).ok();
+    }
 
-    fs::create_dir_all(&path).chain_err(|| {
-        format!("failed to create: `{}`", path.display())
-    }).map_err(|e| cargo::CargoError::from(e))?;
+    fs::create_dir_all(&path).chain_err(|| format!("failed to create: `{}`", path.display()))?;
 
     if !is_multi_sources && options.flag_no_merge_sources {
-        let mut file = File::create(sources_file)
-            .map_err(|e| cargo::CargoError::from(e))?;
-        file.write_all(json!([]).to_string().as_bytes())
-            .map_err(|e| cargo::CargoError::from(e))?;
+        let mut file = File::create(sources_file)?;
+        file.write_all(serde_json::json!([]).to_string().as_bytes())?;
     }
 
     let workspaces = match options.flag_sync {
-        Some(list) => {
-            list.iter().map(|path| {
+        Some(list) => list
+            .iter()
+            .map(|path| {
                 let path = Path::new(path);
                 let manifest = if path.ends_with("Cargo.lock") {
                     config.cwd().join(path.with_file_name("Cargo.toml"))
@@ -180,8 +169,8 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
                     config.cwd().join(path)
                 };
                 Workspace::new(&manifest, config)
-            }).collect::<CargoResult<Vec<_>>>()?
-        }
+            })
+            .collect::<CargoResult<Vec<_>>>()?,
         None => {
             let manifest = config.cwd().join("Cargo.toml");
             vec![Workspace::new(&manifest, config)?]
@@ -199,9 +188,8 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
         options.flag_only_git_deps,
         !options.flag_no_merge_sources,
         options.flag_vendor_main_crate,
-    ).chain_err(|| {
-        format!("failed to sync")
-    }).map_err(|e| cargo::CargoError::from(e))?;
+    )
+    .chain_err(|| format!("failed to sync"))?;
 
     if !options.flag_quiet.unwrap_or(false) {
         eprint!("To use vendored sources, add this to your .cargo/config for this project:\n\n");
@@ -211,16 +199,18 @@ fn real_main(options: Options, config: &mut Config) -> CliResult {
     Ok(())
 }
 
-fn sync(workspaces: &[Workspace],
-        local_dst: &Path,
-        config: &Config,
-        explicit_version: bool,
-        no_delete: bool,
-        disallow_duplicates: bool,
-        use_relative_path: bool,
-        only_git_deps: bool,
-        merge_sources: bool,
-        vendor_main_crate: bool) -> CargoResult<VendorConfig> {
+fn sync(
+    workspaces: &[Workspace],
+    local_dst: &Path,
+    config: &Config,
+    explicit_version: bool,
+    no_delete: bool,
+    disallow_duplicates: bool,
+    use_relative_path: bool,
+    only_git_deps: bool,
+    merge_sources: bool,
+    vendor_main_crate: bool,
+) -> CargoResult<VendorConfig> {
     let canonical_local_dst = local_dst.canonicalize().unwrap_or(local_dst.to_path_buf());
     let mut ids = BTreeMap::new();
     let mut added_crates = Vec::new();
@@ -237,16 +227,15 @@ fn sync(workspaces: &[Workspace],
     // attempt. If anything fails here we basically just move on to the next
     // crate to work with.
     for ws in workspaces {
-        let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
-            "failed to load pkg lockfile"
-        })?;
+        let (packages, resolve) =
+            cargo::ops::resolve_ws(&ws).chain_err(|| "failed to load pkg lockfile")?;
 
         packages.get_many(resolve.iter())?;
 
         for pkg in resolve.iter() {
             // Don't delete actual source code!
             if pkg.source_id().is_path() {
-                continue
+                continue;
             }
             if pkg.source_id().is_git() {
                 continue;
@@ -259,9 +248,8 @@ fn sync(workspaces: &[Workspace],
 
     for ws in workspaces {
         let main_pkg = ws.current().map(|x| x.name().as_str()).unwrap_or("");
-        let (packages, resolve) = cargo::ops::resolve_ws(&ws).chain_err(|| {
-            "failed to load pkg lockfile"
-        })?;
+        let (packages, resolve) =
+            cargo::ops::resolve_ws(&ws).chain_err(|| "failed to load pkg lockfile")?;
 
         packages.get_many(resolve.iter())?;
 
@@ -273,12 +261,16 @@ fn sync(workspaces: &[Workspace],
                     if canonical_path.starts_with(canonical_local_dst.as_path()) {
                         added_crates.push(canonical_path);
                     }
-                    continue
+                    continue;
                 }
             }
-            ids.insert(pkg.clone(), packages.get_one(pkg).chain_err(|| {
-                "failed to fetch package"
-            })?.clone());
+            ids.insert(
+                pkg.clone(),
+                packages
+                    .get_one(pkg)
+                    .chain_err(|| "failed to fetch package")?
+                    .clone(),
+            );
         }
     }
 
@@ -289,17 +281,18 @@ fn sync(workspaces: &[Workspace],
         let map = versions.entry(id.name()).or_insert_with(BTreeMap::default);
 
         match map.get(&id.version()) {
-            Some(prev) if merge_sources =>
-                bail!("found duplicate version of package `{} v{}` \
-                       vendored from two sources:\n\
-                       \n\
-                       \tsource 1: {}\n\
-                       \tsource 2: {}",
-                      id.name(),
-                      id.version(),
-                      prev,
-                      id.source_id()),
-            _ => {},
+            Some(prev) if merge_sources => bail!(
+                "found duplicate version of package `{} v{}` \
+                 vendored from two sources:\n\
+                 \n\
+                 \tsource 1: {}\n\
+                 \tsource 2: {}",
+                id.name(),
+                id.version(),
+                prev,
+                id.source_id()
+            ),
+            _ => {}
         }
         map.insert(id.version(), id.source_id());
     }
@@ -311,7 +304,7 @@ fn sync(workspaces: &[Workspace],
     } else {
         let sources_file = canonical_local_dst.join(SOURCES_FILE_NAME);
         let file = File::open(&sources_file)?;
-        serde_json::from_reader::<_,BTreeSet<PathBuf>>(file)?
+        serde_json::from_reader::<_, BTreeSet<PathBuf>>(file)?
             .into_iter()
             .map(|p| canonical_local_dst.join(p))
             .collect()
@@ -319,30 +312,37 @@ fn sync(workspaces: &[Workspace],
 
     let existing_crates: Vec<PathBuf> = source_paths
         .iter()
-        .flat_map(|path| path
-                  .read_dir()
-                  .map(|iter| iter
-                       .filter_map(|e| e.ok())
-                       .filter(|e| e.path().join("Cargo.toml").exists())
-                       .map(|e| e.path())
-                       .collect::<Vec<_>>())
-                  .unwrap_or(Vec::new()))
+        .flat_map(|path| {
+            path.read_dir()
+                .map(|iter| {
+                    iter.filter_map(|e| e.ok())
+                        .filter(|e| e.path().join("Cargo.toml").exists())
+                        .map(|e| e.path())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(Vec::new())
+        })
         .collect();
 
     let mut sources = BTreeSet::new();
     for (id, pkg) in ids.iter() {
         // Next up, copy it to the vendor directory
-        let src = pkg.manifest_path().parent().expect("manifest_path should point to a file");
+        let src = pkg
+            .manifest_path()
+            .parent()
+            .expect("manifest_path should point to a file");
         let max_version = *versions[&id.name()].iter().rev().next().unwrap().0;
         let dir_has_version_suffix = explicit_version || id.version() != max_version;
         let dst_name = if dir_has_version_suffix {
             if !explicit_version && disallow_duplicates {
-                bail!("found duplicate versions of package `{}` \
-                        at {} and {}, but this was disallowed via \
-                        --disallow-duplicates",
-                       pkg.name(),
-                       id.version(),
-                       max_version)
+                bail!(
+                    "found duplicate versions of package `{}` \
+                     at {} and {}, but this was disallowed via \
+                     --disallow-duplicates",
+                    pkg.name(),
+                    id.version(),
+                    max_version
+                )
             }
             // Eg vendor/futures-0.1.13
             format!("{}-{}", id.name(), id.version())
@@ -350,7 +350,6 @@ fn sync(workspaces: &[Workspace],
             // Eg vendor/futures
             id.name().to_string()
         };
-
 
         if !id.source_id().is_git() && only_git_deps {
             // Skip out if we only want to process git dependencies
@@ -363,9 +362,8 @@ fn sync(workspaces: &[Workspace],
             canonical_local_dst.join(source_id_to_dir_name(id.source_id()))
         };
         if sources.insert(id.source_id()) && !merge_sources {
-            fs::create_dir_all(&source_dir).chain_err(|| {
-                format!("failed to create: `{}`", source_dir.display())
-            }).map_err(|e| cargo::CargoError::from(e))?;
+            fs::create_dir_all(&source_dir)
+                .chain_err(|| format!("failed to create: `{}`", source_dir.display()))?;
         }
         let dst = source_dir.join(&dst_name);
         added_crates.push(dst.clone());
@@ -373,22 +371,23 @@ fn sync(workspaces: &[Workspace],
         let cksum = dst.join(".cargo-checksum.json");
         if dir_has_version_suffix && cksum.exists() {
             // Always re-copy directory without version suffix in case the version changed
-            continue
+            continue;
         }
 
-        config.shell().status("Vendoring",
-                              &format!("{} ({}) to {}", id, src.to_string_lossy(), dst.display()))?;
+        config.shell().status(
+            "Vendoring",
+            &format!("{} ({}) to {}", id, src.to_string_lossy(), dst.display()),
+        )?;
 
         let _ = fs::remove_dir_all(&dst);
         let pathsource = cargo::sources::path::PathSource::new(&src, id.source_id(), config);
         let paths = pathsource.list_files(&pkg)?;
         let mut map = BTreeMap::new();
-        cp_sources(&src, &paths, &dst, &mut map).chain_err(|| {
-            format!("failed to copy over vendored sources for: {}", id)
-        })?;
+        cp_sources(&src, &paths, &dst, &mut map)
+            .chain_err(|| format!("failed to copy over vendored sources for: {}", id))?;
 
         // Finally, emit the metadata about this package
-        let json = json!({
+        let json = serde_json::json!({
             "package": pkg.summary().checksum(),
             "files": map,
         });
@@ -411,7 +410,7 @@ fn sync(workspaces: &[Workspace],
             .iter()
             .map(|src_id| source_id_to_dir_name(*src_id))
             .collect();
-        let old_sources: BTreeSet<String> = serde_json::from_reader::<_,BTreeSet<String>>(file)?
+        let old_sources: BTreeSet<String> = serde_json::from_reader::<_, BTreeSet<String>>(file)?
             .difference(&new_sources)
             .map(|e| e.clone())
             .collect();
@@ -439,9 +438,12 @@ fn sync(workspaces: &[Workspace],
 
     let merged_source_name = "vendored-sources";
     if merge_sources {
-        config.insert(merged_source_name.to_string(), VendorSource::Directory {
-            directory: dir.clone(),
-        });
+        config.insert(
+            merged_source_name.to_string(),
+            VendorSource::Directory {
+                directory: dir.clone(),
+            },
+        );
     }
 
     // replace original sources with vendor
@@ -461,9 +463,10 @@ fn sync(workspaces: &[Workspace],
         if !merge_sources {
             let src_id_string = source_id_to_dir_name(source_id);
             let src_dir = dir.join(src_id_string.clone());
-            config.insert(replace_name.clone(), VendorSource::Directory {
-                directory: src_dir,
-            });
+            config.insert(
+                replace_name.clone(),
+                VendorSource::Directory { directory: src_dir },
+            );
         }
 
         // if source id is a path and vendor_main_crate, skip the source replacement
@@ -503,10 +506,12 @@ fn sync(workspaces: &[Workspace],
     Ok(VendorConfig { source: config })
 }
 
-fn cp_sources(src: &Path,
-              paths: &Vec<PathBuf>,
-              dst: &Path,
-              cksums: &mut BTreeMap<String, String>) -> CargoResult<()> {
+fn cp_sources(
+    src: &Path,
+    paths: &Vec<PathBuf>,
+    dst: &Path,
+    cksums: &mut BTreeMap<String, String>,
+) -> CargoResult<()> {
     for p in paths {
         let relative = p.strip_prefix(&src).unwrap();
 
@@ -515,9 +520,7 @@ fn cp_sources(src: &Path,
             // the time and if we respect them (e.g.  in git) then it'll
             // probably mess with the checksums when a vendor dir is checked
             // into someone else's source control
-            Some(".gitattributes") |
-            Some(".gitignore") |
-            Some(".git") => continue,
+            Some(".gitattributes") | Some(".gitignore") | Some(".git") => continue,
 
             // Temporary Cargo files
             Some(".cargo-ok") => continue,
@@ -530,22 +533,21 @@ fn cp_sources(src: &Path,
                     continue;
                 }
             }
-            _ => ()
+            _ => (),
         };
 
         // Join pathname components individually to make sure that the joined
         // path uses the correct directory separators everywhere, since
         // `relative` may use Unix-style and `dst` may require Windows-style
         // backslashes.
-        let dst = relative.iter().fold(dst.to_owned(), |acc, component| {
-            acc.join(&component)
-        });
+        let dst = relative
+            .iter()
+            .fold(dst.to_owned(), |acc, component| acc.join(&component));
 
         fs::create_dir_all(dst.parent().unwrap())?;
 
-        fs::copy(&p, &dst).chain_err(|| {
-            format!("failed to copy `{}` to `{}`", p.display(), dst.display())
-        })?;
+        fs::copy(&p, &dst)
+            .chain_err(|| format!("failed to copy `{}` to `{}`", p.display(), dst.display()))?;
         cksums.insert(relative.to_str().unwrap().replace("\\", "/"), sha256(&dst)?);
     }
     Ok(())
@@ -576,7 +578,7 @@ fn sha256(p: &Path) -> io::Result<String> {
     loop {
         let n = file.read(&mut buf)?;
         if n == 0 {
-            break
+            break;
         }
         sha.update(&buf[..n]);
     }
