@@ -158,7 +158,7 @@ dependencies = [
  "env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "openssl 0.10.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl 0.10.23 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.91 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -281,7 +281,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "commoncrypto 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "openssl 0.10.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl 0.10.23 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.22"
+version = "0.10.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bitflags 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1472,7 +1472,7 @@ dependencies = [
 "checksum numtoa 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
 "checksum once_cell 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "532c29a261168a45ce28948f9537ddd7a5dd272cc513b3017b1e82a88f962c37"
 "checksum opener 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "04b1d6b086d9b3009550f9b6f81b10ad9428cf14f404b8e1a3a06f6f012c8ec9"
-"checksum openssl 0.10.22 (registry+https://github.com/rust-lang/crates.io-index)" = "a51f452b82d622fc8dd973d7266e9055ac64af25b957d9ced3989142dc61cb6b"
+"checksum openssl 0.10.23 (registry+https://github.com/rust-lang/crates.io-index)" = "97c140cbb82f3b3468193dd14c1b88def39f341f68257f8a7fe8ed9ed3f628a5"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 "checksum openssl-src 111.2.1+1.1.1b (registry+https://github.com/rust-lang/crates.io-index)" = "a42e4a28c5a3da4b0df51795aee275b812164c43a690caa871bfa71bf0d52439"
 "checksum openssl-sys 0.9.47 (registry+https://github.com/rust-lang/crates.io-index)" = "75bdd6dbbb4958d38e47a1d2348847ad1eb4dc205dc5d37473ae504391865acc"
