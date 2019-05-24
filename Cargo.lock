@@ -64,7 +64,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "bstr"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "memchr 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -463,7 +463,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "aho-corasick 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "bstr 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bstr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1400,7 +1400,7 @@ dependencies = [
 "checksum backtrace 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "8ca8a0a1f68b5d04b8d006c726d16e38455fc8886c51fff7c2e6df32333378e2"
 "checksum backtrace-sys 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)" = "797c830ac25ccc92a7f8a7b9862bde440715531514594a6154e3d4a54dd769b6"
 "checksum bitflags 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "bd1fa8ad26490b0a5cfec99089952250301b6716cdeaa7c9ab229598fb82ab66"
-"checksum bstr 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "853b090ce0f45d0265902666bf88039ea3da825e33796716c511a1ec9c170036"
+"checksum bstr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "59604ece62a407dc9164732e5adea02467898954c3a5811fd2dc140af14ef15b"
 "checksum build_const 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "39092a32794787acd8525ee150305ff051b0aa6cc2abaf193924f5ab05425f39"
 "checksum byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a019b10a2a7cdeb292db131fc8113e57ea2a908f6e7894b0c3c671893b65dbeb"
 "checksum bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)" = "206fdffcfa2df7cbe15601ef46c813fce0965eb3286db6b56c583b814b51c81c"
