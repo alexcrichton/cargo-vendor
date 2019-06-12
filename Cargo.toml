@@ -23,7 +23,7 @@ failure = "0.1.5"
 openssl = { version = '0.10.23', optional = true }
 
 [dev-dependencies]
-once_cell = "0.1"
+once_cell = "0.2"
 
 [features]
 vendored-openssl = ['openssl/vendored']
