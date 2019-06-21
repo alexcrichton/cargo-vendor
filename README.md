@@ -1,5 +1,15 @@
 # cargo-vendor
 
+> **Note**: This crate is moving into upstream Cargo itself. If you're on
+> the nightly channel as of 2019-06-20 you don't need to install `cargo-vendor`,
+> but rather `cargo vendor` just works.
+>
+> All future development of a `vendor` subcommand will happen [in upstream
+> Cargo](https://github.com/rust-lang/cargo) itself, and issues/bugs should not
+> be reported to this repository any more.
+>
+> In other words this project is **DEPRECATED** since it's moved into Cargo.
+
 [![Build Status](https://travis-ci.org/alexcrichton/cargo-vendor.svg?branch=master)](https://travis-ci.org/alexcrichton/cargo-vendor)
 [![Build status](https://ci.appveyor.com/api/projects/status/0sqqqnkfgw4o3cvs?svg=true)](https://ci.appveyor.com/project/alexcrichton/cargo-vendor)
 
